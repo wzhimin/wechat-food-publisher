@@ -1,7 +1,7 @@
 {
-  "name": "wxcloudrun-express",
+  "name": "wechat-food-publisher",
   "version": "1.0.0",
-  "description": "微信云托管 express 框架模版",
+  "description": "微信公众号美食内容自动发布服务",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -9,8 +9,10 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "axios": "^1.6.0",
     "cors": "^2.8.5",
     "express": "^4.16.4",
+    "form-data": "^4.0.0",
     "morgan": "^1.10.0",
     "mysql2": "^2.3.2",
     "sequelize": "^6.8.0"
