@@ -73,7 +73,7 @@ async function createDraft({ title, content, thumbMediaId, author, digest }, tok
     {
       articles: [{
         title,
-        author: author || 'AI美食助手',
+        author: author || '王先生kings',
         digest: digest || title,
         content,
         thumb_media_id: thumbMediaId,
