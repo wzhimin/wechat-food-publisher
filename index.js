@@ -47,6 +47,23 @@ async function uploadImage(imageBuffer, token) {
   return res.data.media_id;
 }
 
+// ========== 上传图片并返回URL（用于内容中插入图片）==========
+async function uploadImageForContent(imageBuffer, token) {
+  const form = new FormData();
+  form.append('media', imageBuffer, {
+    filename: 'content.jpg',
+    contentType: 'image/jpeg',
+  });
+  const res = await axios.post(
+    `https://api.weixin.qq.com/cgi-bin/material/add_material?access_token=${token}&type=image`,
+    form,
+    { headers: form.getHeaders() }
+  );
+  if (res.data.errcode) throw new Error(`上传图片失败: ${JSON.stringify(res.data)}`);
+  // 返回微信的图片URL
+  return res.data.url;
+}
+
 // ========== 创建图文草稿 ==========
 async function createDraft({ title, content, thumbMediaId, author, digest }, token) {
   const res = await axios.post(
@@ -167,6 +184,38 @@ app.post('/api/draft', async (req, res) => {
     res.json({ success: true, draftMediaId, message: '草稿创建成功，请到公众号后台手动发布' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// 上传图片并返回URL（用于文章内容中插入图片）
+// POST /api/upload-image
+// Body: { imageBase64 }
+app.post('/api/upload-image', async (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ error: '缺少 imageBase64' });
+    }
+    if (!APP_SECRET) {
+      return res.status(500).json({ error: '未配置 WECHAT_APP_SECRET 环境变量' });
+    }
+
+    const token = await getAccessToken();
+    const imageBuffer = Buffer.from(imageBase64, 'base64');
+    const imageUrl = await uploadImageForContent(imageBuffer, token);
+    console.log('内容图片上传成功:', imageUrl);
+
+    res.json({
+      success: true,
+      imageUrl,
+      message: '图片上传成功'
+    });
+  } catch (err) {
+    console.error('图片上传失败:', err.message);
+    res.status(500).json({
+      error: '图片上传失败',
+      detail: err.message,
+    });
   }
 });
 

@@ -22,7 +22,11 @@
 		"PolicyThreshold": 80
 	}
   ],
-  "envParams": {},
+  "envParams": {
+    "WECHAT_APP_ID": "wx85ae98c22a4d22e1",
+    "WECHAT_APP_SECRET": "在这里填入你的AppSecret",
+    "WECHAT_TOKEN": "wechat_token_2024"
+  },
   "customLogs": "stdout",
   "initialDelaySeconds": 2,
   "dataBaseName": "nodejs_demo",
