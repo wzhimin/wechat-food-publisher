@@ -21,7 +21,8 @@ async function getAccessToken() {
   if (cachedToken && Date.now() < tokenExpireAt) return cachedToken;
 
   async function fetchToken() {
-    const res = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
+    // 使用 getStableAccessToken（2025年后必须用这个）
+    const res = await axios.get('https://api.weixin.qq.com/cgi-bin/stable_token', {
       params: {
         grant_type: 'client_credential',
         appid: APP_ID,
