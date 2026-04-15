@@ -13,6 +13,10 @@ const APP_ID = process.env.WECHAT_APP_ID || 'wx85ae98c22a4d22e1';
 const APP_SECRET = process.env.WECHAT_APP_SECRET;
 const TOKEN = process.env.WECHAT_TOKEN || 'wechat_token_2024';
 
+// 调试日志
+console.log('环境变量 WECHAT_APP_ID:', APP_ID ? '已设置' : '未设置');
+console.log('环境变量 WECHAT_APP_SECRET:', APP_SECRET ? '已设置' : '未设置');
+
 // ========== Access Token 缓存 ==========
 let cachedToken = null;
 let tokenExpireAt = 0;
