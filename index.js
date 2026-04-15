@@ -24,7 +24,6 @@ let tokenExpireAt = 0;
 async function getAccessToken() {
   if (cachedToken && Date.now() < tokenExpireAt) return cachedToken;
 
-  async function getAccessToken() {
   // 方式1: 先用 client_credential（目前云托管能正常使用）
   try {
     const res = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
@@ -36,7 +35,9 @@ async function getAccessToken() {
     });
     if (!res.data.errcode) {
       console.log('使用 client_credential 获取 token 成功');
-      return res.data.access_token;
+      cachedToken = res.data.access_token;
+      tokenExpireAt = Date.now() + (7200 - 300) * 1000;
+      return cachedToken;
     }
     // 只有返回 40001/40125 时才切换
     if (res.data.errcode !== 40001 && res.data.errcode !== 40125) {
@@ -55,24 +56,8 @@ async function getAccessToken() {
   });
   if (res2.data.errcode) throw new Error(`stable_token 也失败: ${JSON.stringify(res2.data)}`);
   console.log('使用 stable_token 获取 token 成功');
-  return res2.data.access_token;
-}
-
-  try {
-    cachedToken = await fetchToken();
-  } catch (err) {
-    // 40001 = token 过期，清缓存重试一次
-    if (err.message.includes('40001')) {
-      cachedToken = null;
-      tokenExpireAt = 0;
-      cachedToken = await fetchToken();
-    } else {
-      throw err;
-    }
-  }
-
+  cachedToken = res2.data.access_token;
   tokenExpireAt = Date.now() + (7200 - 300) * 1000;
-  console.log('Access Token 刷新成功');
   return cachedToken;
 }
 
