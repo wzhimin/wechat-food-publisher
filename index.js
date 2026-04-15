@@ -19,16 +19,33 @@ let tokenExpireAt = 0;
 
 async function getAccessToken() {
   if (cachedToken && Date.now() < tokenExpireAt) return cachedToken;
-  const res = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
-    params: {
-      grant_type: 'client_credential',
-      appid: APP_ID,
-      secret: APP_SECRET,
+
+  async function fetchToken() {
+    const res = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
+      params: {
+        grant_type: 'client_credential',
+        appid: APP_ID,
+        secret: APP_SECRET,
+      }
+    });
+    if (res.data.errcode) throw new Error(`获取Token失败: ${JSON.stringify(res.data)}`);
+    return res.data.access_token;
+  }
+
+  try {
+    cachedToken = await fetchToken();
+  } catch (err) {
+    // 40001 = token 过期，清缓存重试一次
+    if (err.message.includes('40001')) {
+      cachedToken = null;
+      tokenExpireAt = 0;
+      cachedToken = await fetchToken();
+    } else {
+      throw err;
     }
-  });
-  if (res.data.errcode) throw new Error(`获取Token失败: ${JSON.stringify(res.data)}`);
-  cachedToken = res.data.access_token;
-  tokenExpireAt = Date.now() + (res.data.expires_in - 300) * 1000;
+  }
+
+  tokenExpireAt = Date.now() + (7200 - 300) * 1000;
   console.log('Access Token 刷新成功');
   return cachedToken;
 }
