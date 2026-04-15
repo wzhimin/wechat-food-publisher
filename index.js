@@ -24,37 +24,37 @@ let tokenExpireAt = 0;
 async function getAccessToken() {
   if (cachedToken && Date.now() < tokenExpireAt) return cachedToken;
 
-  // 方式1: stable_token（云托管推荐方式，配合开放接口服务使用）
+  // 方式1: client_credential（目前云托管能正常使用）
   try {
-    const res = await axios.post('https://api.weixin.qq.com/cgi-bin/stable_token', {
-      grant_type: 'client_credential',
-      appid: APP_ID,
-      secret: APP_SECRET,
+    const res = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
+      params: {
+        grant_type: 'client_credential',
+        appid: APP_ID,
+        secret: APP_SECRET,
+      }
     });
     if (!res.data.errcode) {
-      console.log('使用 stable_token 获取 token 成功');
+      console.log('使用 client_credential 获取 token 成功');
       cachedToken = res.data.access_token;
       tokenExpireAt = Date.now() + (7200 - 300) * 1000;
       return cachedToken;
     }
     if (res.data.errcode !== 40001 && res.data.errcode !== 40125) {
-      throw new Error(`stable_token 失败: ${JSON.stringify(res.data)}`);
+      throw new Error(`client_credential 失败: ${JSON.stringify(res.data)}`);
     }
-    console.log('stable_token 失效，尝试 client_credential');
+    console.log('client_credential 失效，尝试 stable_token');
   } catch (err) {
-    console.log('stable_token 异常:', err.message);
+    console.log('client_credential 异常:', err.message);
   }
 
-  // 方式2: client_credential（备用）
-  const res2 = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
-    params: {
-      grant_type: 'client_credential',
-      appid: APP_ID,
-      secret: APP_SECRET,
-    }
+  // 方式2: stable_token（备用，等云托管支持后使用）
+  const res2 = await axios.post('https://api.weixin.qq.com/cgi-bin/stable_token', {
+    grant_type: 'client_credential',
+    appid: APP_ID,
+    secret: APP_SECRET,
   });
-  if (res2.data.errcode) throw new Error(`client_credential 也失败: ${JSON.stringify(res2.data)}`);
-  console.log('使用 client_credential 获取 token 成功');
+  if (res2.data.errcode) throw new Error(`stable_token 也失败: ${JSON.stringify(res2.data)}`);
+  console.log('使用 stable_token 获取 token 成功');
   cachedToken = res2.data.access_token;
   tokenExpireAt = Date.now() + (7200 - 300) * 1000;
   return cachedToken;
