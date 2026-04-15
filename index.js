@@ -25,16 +25,33 @@ async function getAccessToken() {
   if (cachedToken && Date.now() < tokenExpireAt) return cachedToken;
 
   async function fetchToken() {
-    // 尝试用 client_credential（旧方式）
-    const res = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
-      params: {
-        grant_type: 'client_credential',
-        appid: APP_ID,
-        secret: APP_SECRET,
+    // 方式1: 先尝试 client_credential
+    try {
+      const res = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
+        params: {
+          grant_type: 'client_credential',
+          appid: APP_ID,
+          secret: APP_SECRET,
+        }
+      });
+      if (!res.data.errcode) {
+        console.log('使用 client_credential 获取 token 成功');
+        return res.data.access_token;
       }
+      console.log('client_credential 失败，尝试 stable_token:', res.data);
+    } catch (err) {
+      console.log('client_credential 异常:', err.message);
+    }
+
+    // 方式2: 尝试 stable_token（2025后推荐）
+    const res2 = await axios.post('https://api.weixin.qq.com/cgi-bin/stable_token', {
+      grant_type: 'client_credential',
+      appid: APP_ID,
+      secret: APP_SECRET,
     });
-    if (res.data.errcode) throw new Error(`获取Token失败: ${JSON.stringify(res.data)}`);
-    return res.data.access_token;
+    if (res2.data.errcode) throw new Error(`获取Token失败: ${JSON.stringify(res2.data)}`);
+    console.log('使用 stable_token 获取 token 成功');
+    return res2.data.access_token;
   }
 
   try {
