@@ -13,62 +13,20 @@ const APP_ID = process.env.WECHAT_APP_ID || 'wx85ae98c22a4d22e1';
 const APP_SECRET = process.env.WECHAT_APP_SECRET;
 const TOKEN = process.env.WECHAT_TOKEN || 'wechat_token_2024';
 
-// 调试日志
-console.log('环境变量 WECHAT_APP_ID:', APP_ID ? '已设置' : '未设置');
 console.log('环境变量 WECHAT_APP_SECRET:', APP_SECRET ? '已设置' : '未设置');
 
-// ========== Access Token 缓存 ==========
-let cachedToken = null;
-let tokenExpireAt = 0;
-
-async function getAccessToken() {
-  if (cachedToken && Date.now() < tokenExpireAt) return cachedToken;
-
-  // 方式1: client_credential（目前云托管能正常使用）
-  try {
-    const res = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
-      params: {
-        grant_type: 'client_credential',
-        appid: APP_ID,
-        secret: APP_SECRET,
-      }
-    });
-    if (!res.data.errcode) {
-      console.log('使用 client_credential 获取 token 成功');
-      cachedToken = res.data.access_token;
-      tokenExpireAt = Date.now() + (7200 - 300) * 1000;
-      return cachedToken;
-    }
-    if (res.data.errcode !== 40001 && res.data.errcode !== 40125) {
-      throw new Error(`client_credential 失败: ${JSON.stringify(res.data)}`);
-    }
-    console.log('client_credential 失效，尝试 stable_token');
-  } catch (err) {
-    console.log('client_credential 异常:', err.message);
-  }
-
-  // 方式2: stable_token（备用，等云托管支持后使用）
-  const res2 = await axios.post('https://api.weixin.qq.com/cgi-bin/stable_token', {
-    grant_type: 'client_credential',
-    appid: APP_ID,
-    secret: APP_SECRET,
-  });
-  if (res2.data.errcode) throw new Error(`stable_token 也失败: ${JSON.stringify(res2.data)}`);
-  console.log('使用 stable_token 获取 token 成功');
-  cachedToken = res2.data.access_token;
-  tokenExpireAt = Date.now() + (7200 - 300) * 1000;
-  return cachedToken;
-}
+// 开放接口服务：不需要 access_token，云托管自动鉴权
+// 直接调用 http://api.weixin.qq.com/...
 
 // ========== 上传图片到永久素材 ==========
-async function uploadImage(imageBuffer, token) {
+async function uploadImage(imageBuffer) {
   const form = new FormData();
   form.append('media', imageBuffer, {
     filename: 'cover.jpg',
     contentType: 'image/jpeg',
   });
   const res = await axios.post(
-    `https://api.weixin.qq.com/cgi-bin/material/add_material?access_token=${token}&type=image`,
+    `http://api.weixin.qq.com/cgi-bin/material/add_material?type=image`,
     form,
     { headers: form.getHeaders() }
   );
@@ -77,26 +35,25 @@ async function uploadImage(imageBuffer, token) {
 }
 
 // ========== 上传图片并返回URL（用于内容中插入图片）==========
-async function uploadImageForContent(imageBuffer, token) {
+async function uploadImageForContent(imageBuffer) {
   const form = new FormData();
   form.append('media', imageBuffer, {
     filename: 'content.jpg',
     contentType: 'image/jpeg',
   });
   const res = await axios.post(
-    `https://api.weixin.qq.com/cgi-bin/material/add_material?access_token=${token}&type=image`,
+    `http://api.weixin.qq.com/cgi-bin/material/add_material?type=image`,
     form,
     { headers: form.getHeaders() }
   );
   if (res.data.errcode) throw new Error(`上传图片失败: ${JSON.stringify(res.data)}`);
-  // 返回微信的图片URL
   return res.data.url;
 }
 
 // ========== 创建图文草稿 ==========
-async function createDraft({ title, content, thumbMediaId, author, digest }, token) {
+async function createDraft({ title, content, thumbMediaId, author, digest }) {
   const res = await axios.post(
-    `https://api.weixin.qq.com/cgi-bin/draft/add?access_token=${token}`,
+    `http://api.weixin.qq.com/cgi-bin/draft/add`,
     {
       articles: [{
         title,
@@ -114,9 +71,9 @@ async function createDraft({ title, content, thumbMediaId, author, digest }, tok
 }
 
 // ========== 发布草稿 ==========
-async function publishDraft(mediaId, token) {
+async function publishDraft(mediaId) {
   const res = await axios.post(
-    `https://api.weixin.qq.com/cgi-bin/freepublish/submit?access_token=${token}`,
+    `http://api.weixin.qq.com/cgi-bin/freepublish/submit`,
     { media_id: mediaId }
   );
   return res.data;
@@ -133,10 +90,10 @@ function generateDefaultCover() {
 // ========== 缓存默认封面mediaId ==========
 let defaultThumbMediaId = null;
 
-async function getDefaultThumbMediaId(token) {
+async function getDefaultThumbMediaId() {
   if (defaultThumbMediaId) return defaultThumbMediaId;
   const buf = generateDefaultCover();
-  defaultThumbMediaId = await uploadImage(buf, token);
+  defaultThumbMediaId = await uploadImage(buf);
   console.log('默认封面上传成功:', defaultThumbMediaId);
   return defaultThumbMediaId;
 }
@@ -168,28 +125,23 @@ app.post('/api/publish', async (req, res) => {
     if (!title || !content) {
       return res.status(400).json({ error: '缺少必填字段: title 或 content' });
     }
-    if (!APP_SECRET) {
-      return res.status(500).json({ error: '未配置 WECHAT_APP_SECRET 环境变量' });
-    }
-
-    const token = await getAccessToken();
 
     // 上传封面图（如果有）
     let thumbMediaId = null;
     if (imageBase64) {
       const imageBuffer = Buffer.from(imageBase64, 'base64');
-      thumbMediaId = await uploadImage(imageBuffer, token);
+      thumbMediaId = await uploadImage(imageBuffer);
       console.log('封面图上传成功:', thumbMediaId);
     }
 
     // 创建草稿
-    const draftMediaId = await createDraft({ title, content, thumbMediaId, author, digest }, token);
+    const draftMediaId = await createDraft({ title, content, thumbMediaId, author, digest });
     console.log('草稿创建成功:', draftMediaId);
 
     // 发布
     let publishResult = null;
     if (autoPublish) {
-      publishResult = await publishDraft(draftMediaId, token);
+      publishResult = await publishDraft(draftMediaId);
       console.log('发布结果:', publishResult);
     }
 
@@ -212,26 +164,19 @@ app.post('/api/publish', async (req, res) => {
 
 // 仅创建草稿（不发布）
 app.post('/api/draft', async (req, res) => {
-  req.body.autoPublish = false;
-  // 复用 /api/publish 逻辑
-  const mockRes = {
-    json: (data) => res.json(data),
-    status: (code) => ({ json: (data) => res.status(code).json(data) }),
-  };
-  // 直接调用内部逻辑
   try {
     const { title, content, imageBase64, author, digest } = req.body;
     if (!title || !content) return res.status(400).json({ error: '缺少 title 或 content' });
-    const token = await getAccessToken();
+
     let thumbMediaId;
     if (imageBase64) {
       const buf = Buffer.from(imageBase64, 'base64');
-      thumbMediaId = await uploadImage(buf, token);
+      thumbMediaId = await uploadImage(buf);
     } else {
       // 没有封面图时使用默认封面
-      thumbMediaId = await getDefaultThumbMediaId(token);
+      thumbMediaId = await getDefaultThumbMediaId();
     }
-    const draftMediaId = await createDraft({ title, content, thumbMediaId, author, digest }, token);
+    const draftMediaId = await createDraft({ title, content, thumbMediaId, author, digest });
     res.json({ success: true, draftMediaId, message: '草稿创建成功，请到公众号后台手动发布' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -247,13 +192,9 @@ app.post('/api/upload-image', async (req, res) => {
     if (!imageBase64) {
       return res.status(400).json({ error: '缺少 imageBase64' });
     }
-    if (!APP_SECRET) {
-      return res.status(500).json({ error: '未配置 WECHAT_APP_SECRET 环境变量' });
-    }
 
-    const token = await getAccessToken();
     const imageBuffer = Buffer.from(imageBase64, 'base64');
-    const imageUrl = await uploadImageForContent(imageBuffer, token);
+    const imageUrl = await uploadImageForContent(imageBuffer);
     console.log('内容图片上传成功:', imageUrl);
 
     res.json({
