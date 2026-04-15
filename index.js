@@ -24,39 +24,38 @@ let tokenExpireAt = 0;
 async function getAccessToken() {
   if (cachedToken && Date.now() < tokenExpireAt) return cachedToken;
 
-  async function fetchToken() {
-    // 方式1: 先尝试 client_credential
-    try {
-      const res = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
-        params: {
-          grant_type: 'client_credential',
-          appid: APP_ID,
-          secret: APP_SECRET,
-        }
-      });
-      // 只有返回 40001/40125 时才切换到 stable_token
-      if (!res.data.errcode) {
-        console.log('使用 client_credential 获取 token 成功');
-        return res.data.access_token;
-      }
-      if (res.data.errcode !== 40001 && res.data.errcode !== 40125) {
-        throw new Error(`client_credential 失败: ${JSON.stringify(res.data)}`);
-      }
-      console.log('client_credential 失效(errcode=' + res.data.errcode + ')，尝试 stable_token');
-    } catch (err) {
-      console.log('client_credential 异常:', err.message);
-    }
-
-    // 方式2: 尝试 stable_token（当 client_credential 失效时）
-    const res2 = await axios.post('https://api.weixin.qq.com/cgi-bin/stable_token', {
+  async function getAccessToken() {
+  // 云托管开放接口服务：直接调用 http://api.weixin.qq.com，不带 access_token
+  // 由云托管自动处理鉴权，需要在控制台开启「开放接口服务」
+  
+  // 方式1: 用 stable_token（云托管推荐方式，不需要 token 管理）
+  try {
+    const res = await axios.post('http://api.weixin.qq.com/cgi-bin/stable_token', {
       grant_type: 'client_credential',
       appid: APP_ID,
       secret: APP_SECRET,
     });
-    if (res2.data.errcode) throw new Error(`stable_token 也失败: ${JSON.stringify(res2.data)}`);
-    console.log('使用 stable_token 获取 token 成功');
-    return res2.data.access_token;
+    if (!res.data.errcode) {
+      console.log('使用云托管开放接口获取 token 成功');
+      return res.data.access_token;
+    }
+    console.log('stable_token 失败:', res.data);
+  } catch (err) {
+    console.log('stable_token 异常:', err.message);
   }
+
+  // 方式2: 回退到 client_credential
+  const res2 = await axios.get('http://api.weixin.qq.com/cgi-bin/token', {
+    params: {
+      grant_type: 'client_credential',
+      appid: APP_ID,
+      secret: APP_SECRET,
+    }
+  });
+  if (res2.data.errcode) throw new Error(`获取Token失败: ${JSON.stringify(res2.data)}`);
+  console.log('使用 client_credential 获取 token 成功');
+  return res2.data.access_token;
+}
 
   try {
     cachedToken = await fetchToken();
@@ -84,7 +83,7 @@ async function uploadImage(imageBuffer, token) {
     contentType: 'image/jpeg',
   });
   const res = await axios.post(
-    `https://api.weixin.qq.com/cgi-bin/material/add_material?access_token=${token}&type=image`,
+    `http://api.weixin.qq.com/cgi-bin/material/add_material?access_token=${token}&type=image`,
     form,
     { headers: form.getHeaders() }
   );
@@ -100,7 +99,7 @@ async function uploadImageForContent(imageBuffer, token) {
     contentType: 'image/jpeg',
   });
   const res = await axios.post(
-    `https://api.weixin.qq.com/cgi-bin/material/add_material?access_token=${token}&type=image`,
+    `http://api.weixin.qq.com/cgi-bin/material/add_material?access_token=${token}&type=image`,
     form,
     { headers: form.getHeaders() }
   );
@@ -112,7 +111,7 @@ async function uploadImageForContent(imageBuffer, token) {
 // ========== 创建图文草稿 ==========
 async function createDraft({ title, content, thumbMediaId, author, digest }, token) {
   const res = await axios.post(
-    `https://api.weixin.qq.com/cgi-bin/draft/add?access_token=${token}`,
+    `http://api.weixin.qq.com/cgi-bin/draft/add?access_token=${token}`,
     {
       articles: [{
         title,
@@ -132,7 +131,7 @@ async function createDraft({ title, content, thumbMediaId, author, digest }, tok
 // ========== 发布草稿 ==========
 async function publishDraft(mediaId, token) {
   const res = await axios.post(
-    `https://api.weixin.qq.com/cgi-bin/freepublish/submit?access_token=${token}`,
+    `http://api.weixin.qq.com/cgi-bin/freepublish/submit?access_token=${token}`,
     { media_id: mediaId }
   );
   return res.data;
