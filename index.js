@@ -22,12 +22,11 @@ async function getAccessToken() {
 
   async function fetchToken() {
     // 使用 getStableAccessToken（2025年后必须用这个）
-    const res = await axios.get('https://api.weixin.qq.com/cgi-bin/stable_token', {
-      params: {
-        grant_type: 'client_credential',
-        appid: APP_ID,
-        secret: APP_SECRET,
-      }
+    // 注意：需要 POST 方法，不能用 GET
+    const res = await axios.post('https://api.weixin.qq.com/cgi-bin/stable_token', {
+      grant_type: 'client_credential',
+      appid: APP_ID,
+      secret: APP_SECRET,
     });
     if (res.data.errcode) throw new Error(`获取Token失败: ${JSON.stringify(res.data)}`);
     return res.data.access_token;
