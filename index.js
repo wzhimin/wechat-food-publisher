@@ -5,6 +5,15 @@ const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
 
+// ========== 数据库初始化 ==========
+const { init } = require('./db');
+const User = require('./models/User');
+const Todo = require('./models/Todo');
+
+// ========== 小程序接口路由 ==========
+const userRouter = require('./routes/user');
+const todoRouter = require('./routes/todo');
+
 const app = express();
 app.use(express.json({ limit: '20mb' }));
 
@@ -211,7 +220,25 @@ app.post('/api/upload-image', async (req, res) => {
   }
 });
 
+// ========== 注册小程序接口路由 ==========
+app.use('/api/user', userRouter);
+app.use('/api/todo', todoRouter);
+
 const port = process.env.PORT || 80;
-app.listen(port, '0.0.0.0', () => {
-  console.log(`微信公众号发布服务启动，端口: ${port}`);
-});
+
+// ========== 启动 ==========
+// 初始化数据库，同步模型表（自动建表，不存在才建）
+init()
+  .then(async () => {
+    await User.sync({ alter: true });
+    await Todo.sync({ alter: true });
+    console.log('数据库初始化完成');
+
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`服务启动，端口: ${port}`);
+    });
+  })
+  .catch((err) => {
+    console.error('数据库初始化失败:', err.message);
+    process.exit(1);
+  });
