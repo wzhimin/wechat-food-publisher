@@ -259,10 +259,8 @@ init()
     await User.sync({ alter: 'safe' });
     await Todo.sync({ alter: 'safe' });
     await Recipe.sync({ alter: 'safe' });
-    try {
-      await sequelize.query('ALTER TABLE collections ADD COLUMN recipeId INT NOT NULL DEFAULT 0;');
-    } catch (e) { /* 列可能已存在，忽略 */ }
-    await Collection.sync({ alter: 'safe' });
+    // TODO: 部署后确认collections表正常，改回 alter: 'safe'
+    await Collection.sync({ force: true });
     await MealPlan.sync({ alter: 'safe' });
     console.log('数据库初始化完成');
 
