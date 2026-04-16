@@ -102,6 +102,23 @@ router.get('/detail/:id', async (req, res) => {
   }
 });
 
+// POST /api/recipe/delete
+// 删除菜谱（管理员用）
+// Body: { id }
+router.post('/delete', async (req, res) => {
+  try {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: '缺少 id' });
+    const recipe = await Recipe.findByPk(id);
+    if (!recipe) return res.status(404).json({ error: '菜谱不存在' });
+    await recipe.destroy();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[/api/recipe/delete]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/recipe/parse
 // 解析 markdown 文本，批量入库菜谱
 // Body: { markdown, cover?, articleId?, publishedAt? }
