@@ -254,18 +254,16 @@ app.use('/api/meal', mealRouter);
 const port = process.env.PORT || 80;
 
 // ========== 启动 ==========
-// 初始化数据库，同步模型表（自动建表，不存在才建）
 init()
   .then(async () => {
-    await User.sync({ alter: true });
-    await Todo.sync({ alter: true });
-    await Recipe.sync({ alter: true });
-    // collections 表先确保有 recipeId 列再建索引
-try {
-  await sequelize.query('ALTER TABLE collections ADD COLUMN recipeId INT NOT NULL DEFAULT 0;');
-} catch (e) { /* 列可能已存在 */ }
-await Collection.sync({ alter: true });
-    await MealPlan.sync({ alter: true });
+    await User.sync({ alter: 'safe' });
+    await Todo.sync({ alter: 'safe' });
+    await Recipe.sync({ alter: 'safe' });
+    try {
+      await sequelize.query('ALTER TABLE collections ADD COLUMN recipeId INT NOT NULL DEFAULT 0;');
+    } catch (e) { /* 列可能已存在，忽略 */ }
+    await Collection.sync({ alter: 'safe' });
+    await MealPlan.sync({ alter: 'safe' });
     console.log('数据库初始化完成');
 
     app.listen(port, '0.0.0.0', () => {
