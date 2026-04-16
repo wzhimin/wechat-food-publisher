@@ -9,10 +9,17 @@ const path = require('path');
 const { init } = require('./db');
 const User = require('./models/User');
 const Todo = require('./models/Todo');
+const Recipe = require('./models/Recipe');
+const Collection = require('./models/Collection');
+const MealPlan = require('./models/MealPlan');
 
 // ========== 小程序接口路由 ==========
 const userRouter = require('./routes/user');
 const todoRouter = require('./routes/todo');
+const recipeRouter = require('./routes/recipe');
+const collectionRouter = require('./routes/collection');
+const mealRouter = require('./routes/meal');
+const { parseMarkdownRecipes } = require('./routes/recipe');
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));
@@ -187,6 +194,23 @@ app.post('/api/draft', async (req, res) => {
     }
     const draftMediaId = await createDraft({ title, content, thumbMediaId, author, digest });
     res.json({ success: true, draftMediaId, message: '草稿创建成功，请到公众号后台手动发布' });
+
+    // 发布成功后自动解析菜谱入库（异步，不阻塞响应）
+    setImmediate(async () => {
+      try {
+        const recipes = parseMarkdownRecipes(content, {
+          cover: null,
+          articleId: draftMediaId,
+          publishedAt: new Date(),
+        });
+        if (recipes.length > 0) {
+          await Recipe.bulkCreate(recipes, { ignoreDuplicates: true });
+          console.log(`[菜谱入库] 成功入库 ${recipes.length} 道菜：${recipes.map(r => r.title).join(', ')}`);
+        }
+      } catch (err) {
+        console.error('[菜谱入库] 失败:', err.message);
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -223,6 +247,9 @@ app.post('/api/upload-image', async (req, res) => {
 // ========== 注册小程序接口路由 ==========
 app.use('/api/user', userRouter);
 app.use('/api/todo', todoRouter);
+app.use('/api/recipe', recipeRouter);
+app.use('/api/collect', collectionRouter);
+app.use('/api/meal', mealRouter);
 
 const port = process.env.PORT || 80;
 
@@ -232,6 +259,9 @@ init()
   .then(async () => {
     await User.sync({ alter: true });
     await Todo.sync({ alter: true });
+    await Recipe.sync({ alter: true });
+    await Collection.sync({ alter: true });
+    await MealPlan.sync({ alter: true });
     console.log('数据库初始化完成');
 
     app.listen(port, '0.0.0.0', () => {
