@@ -7,9 +7,19 @@ const User = require('../models/User');
 // Body: { nickName, avatarUrl }
 router.post('/login', async (req, res) => {
   try {
-    const openid = req.headers['x-wx-openid'];
+    // 打印所有 x-wx 开头的 header，排查资源复用场景的 openid 字段名
+    const wxHeaders = {};
+    for (const key of Object.keys(req.headers)) {
+      if (key.startsWith('x-wx')) wxHeaders[key] = req.headers[key];
+    }
+    console.log('[login] wx headers:', JSON.stringify(wxHeaders));
+
+    // 资源复用场景下 openid 可能在不同字段
+    const openid = req.headers['x-wx-openid']
+      || req.headers['x-wx-source-openid']
+      || req.headers['x-wx-from-openid'];
     if (!openid) {
-      return res.status(400).json({ error: '无法获取用户身份' });
+      return res.status(400).json({ error: '无法获取用户身份', wxHeaders });
     }
 
     const { nickName, avatarUrl } = req.body;
