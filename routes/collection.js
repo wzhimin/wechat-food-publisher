@@ -4,14 +4,13 @@ const Collection = require('../models/Collection');
 const Recipe = require('../models/Recipe');
 
 // GET /api/collect/list?openid=xxx
-// 获取我的收藏列表
+// 获取我的收藏列表（不传openid则返回所有）
 router.get('/list', async (req, res) => {
   try {
     const { openid } = req.query;
-    if (!openid) return res.status(400).json({ error: '缺少 openid' });
-
+    const where = openid ? { openid } : {};
     const collections = await Collection.findAll({
-      where: { openid },
+      where,
       order: [['created_at', 'DESC']],
     });
 
@@ -40,14 +39,15 @@ router.get('/list', async (req, res) => {
 
 // POST /api/collect/add
 // 添加收藏
-// Body: { openid, recipeId }
+// Body: { openid?, recipeId }
 router.post('/add', async (req, res) => {
   try {
     const { openid, recipeId } = req.body;
-    if (!openid || !recipeId) return res.status(400).json({ error: '缺少 openid 或 recipeId' });
+    if (!recipeId) return res.status(400).json({ error: '缺少 recipeId' });
 
     const [item, created] = await Collection.findOrCreate({
-      where: { openid, recipeId },
+      where: { recipeId },
+      defaults: { openid: openid || null },
     });
 
     res.json({ success: true, data: item, created });
@@ -57,18 +57,33 @@ router.post('/add', async (req, res) => {
   }
 });
 
-// POST /api/collect/remove
+// POST /api/collect/remove 或 /api/collect/delete
 // 取消收藏
-// Body: { openid, recipeId }
+// Body: { openid?, recipeId }
 router.post('/remove', async (req, res) => {
   try {
     const { openid, recipeId } = req.body;
-    if (!openid || !recipeId) return res.status(400).json({ error: '缺少 openid 或 recipeId' });
+    if (!recipeId) return res.status(400).json({ error: '缺少 recipeId' });
 
-    await Collection.destroy({ where: { openid, recipeId } });
+    const where = { recipeId };
+    if (openid) where.openid = openid;
+
+    await Collection.destroy({ where });
     res.json({ success: true });
   } catch (err) {
     console.error('[/api/collect/remove]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE 别名
+router.delete('/delete', async (req, res) => {
+  try {
+    const { recipeId } = req.body;
+    if (!recipeId) return res.status(400).json({ error: '缺少 recipeId' });
+    await Collection.destroy({ where: { recipeId } });
+    res.json({ success: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

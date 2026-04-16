@@ -4,8 +4,8 @@ const { sequelize } = require('../db');
 const Collection = sequelize.define('Collection', {
   openid: {
     type: DataTypes.STRING(64),
-    allowNull: false,
-    comment: '用户openid',
+    allowNull: true,
+    comment: '用户openid（可选，不传时表示无用户收藏）',
   },
   recipeId: {
     type: DataTypes.INTEGER,
@@ -18,7 +18,7 @@ const Collection = sequelize.define('Collection', {
   createdAt: 'created_at',
   updatedAt: false,
   indexes: [
-    { unique: true, fields: ['openid', 'recipeId'] },
+    { unique: true, fields: ['recipeId'] },
   ],
 });
 

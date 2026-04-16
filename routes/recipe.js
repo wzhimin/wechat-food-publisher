@@ -89,11 +89,11 @@ router.get('/random', async (req, res) => {
   }
 });
 
-// GET /api/recipe/detail/:id
-// 菜谱详情
+// GET /api/recipe/detail/:id 或 /api/recipe/detail?id=xxx
 router.get('/detail/:id', async (req, res) => {
   try {
-    const recipe = await Recipe.findByPk(req.params.id);
+    const id = req.params.id || req.query.id;
+    const recipe = await Recipe.findByPk(id);
     if (!recipe) return res.status(404).json({ error: '菜谱不存在' });
     res.json({ success: true, data: recipe });
   } catch (err) {
