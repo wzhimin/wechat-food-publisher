@@ -90,9 +90,10 @@ router.get('/random', async (req, res) => {
 });
 
 // GET /api/recipe/detail/:id 或 /api/recipe/detail?id=xxx
-router.get('/detail/:id', async (req, res) => {
+async function getDetail(req, res) {
   try {
     const id = req.params.id || req.query.id;
+    if (!id) return res.status(400).json({ error: '缺少 id' });
     const recipe = await Recipe.findByPk(id);
     if (!recipe) return res.status(404).json({ error: '菜谱不存在' });
     res.json({ success: true, data: recipe });
@@ -100,7 +101,9 @@ router.get('/detail/:id', async (req, res) => {
     console.error('[/api/recipe/detail]', err.message);
     res.status(500).json({ error: err.message });
   }
-});
+}
+router.get('/detail', getDetail);      // ?id=xxx
+router.get('/detail/:id', getDetail);  // /detail/xxx
 
 // POST /api/recipe/delete
 // 删除菜谱（管理员用）
