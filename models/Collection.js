@@ -18,7 +18,7 @@ const Collection = sequelize.define('Collection', {
   createdAt: 'created_at',
   updatedAt: false,
   indexes: [
-    { unique: true, fields: ['openid', 'recipe_id'] },
+    { unique: true, fields: ['openid', 'recipeId'] },
   ],
 });
 

@@ -260,7 +260,11 @@ init()
     await User.sync({ alter: true });
     await Todo.sync({ alter: true });
     await Recipe.sync({ alter: true });
-    await Collection.sync({ alter: true });
+    // collections 表先确保有 recipeId 列再建索引
+try {
+  await sequelize.query('ALTER TABLE collections ADD COLUMN recipeId INT NOT NULL DEFAULT 0;');
+} catch (e) { /* 列可能已存在 */ }
+await Collection.sync({ alter: true });
     await MealPlan.sync({ alter: true });
     console.log('数据库初始化完成');
 
