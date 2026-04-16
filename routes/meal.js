@@ -7,7 +7,8 @@ const Recipe = require('../models/Recipe');
 // 获取某天的午餐/晚餐计划
 router.get('/list', async (req, res) => {
   try {
-    const { openid, date } = req.query;
+    const openid = req.query.openid || req.headers['x-wx-openid'] || '';
+    const { date } = req.query;
     if (!openid) return res.status(400).json({ error: '缺少 openid' });
 
     const planDate = date || new Date().toISOString().slice(0, 10);
@@ -43,6 +44,7 @@ router.get('/list', async (req, res) => {
 router.post('/add', async (req, res) => {
   try {
     const { openid, type, title, recipeId, date } = req.body;
+    const openid = req.body.openid || req.headers['x-wx-openid'] || '';
     if (!openid || !type || !title) {
       return res.status(400).json({ error: '缺少 openid、type 或 title' });
     }
@@ -74,6 +76,7 @@ router.post('/add', async (req, res) => {
 router.post('/update', async (req, res) => {
   try {
     const { id, openid, done, title } = req.body;
+    const openid = req.body.openid || req.headers['x-wx-openid'] || '';
     if (!id || !openid) return res.status(400).json({ error: '缺少 id 或 openid' });
 
     const plan = await MealPlan.findOne({ where: { id, openid } });
@@ -97,6 +100,7 @@ router.post('/update', async (req, res) => {
 router.post('/delete', async (req, res) => {
   try {
     const { id, openid } = req.body;
+    const openid = req.body.openid || req.headers['x-wx-openid'] || '';
     if (!id || !openid) return res.status(400).json({ error: '缺少 id 或 openid' });
 
     const plan = await MealPlan.findOne({ where: { id, openid } });
