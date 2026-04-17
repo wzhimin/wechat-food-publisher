@@ -335,6 +335,86 @@ app.post('/api/push/meal-reminder', async (req, res) => {
   }
 });
 
+// ========== 订阅消息定时推送 ==========
+// 服务一直运行，定时器也一直跑
+// 午餐 11:00 推送，晚餐 17:00 推送
+let lastPushDate = { lunch: null, dinner: null }; // 避免同一天重复推送
+
+async function pushMealReminder(type) {
+  const today = new Date().toISOString().slice(0, 10);
+  const key = type;
+  if (lastPushDate[key] === today) return; // 今天已推送，跳过
+
+  const TEMPLATE_ID = 'rS11TYryYUWVa1mzNguH9My99fcEcSZhrnoMw4WtkkQ';
+
+  try {
+    const plans = await MealPlan.findAll({
+      where: { planDate: today, type },
+    });
+
+    if (plans.length === 0) return;
+
+    // 按 openid 分组
+    const userPlans = {};
+    for (const p of plans) {
+      if (!userPlans[p.openid]) userPlans[p.openid] = [];
+      userPlans[p.openid].push(p.title);
+    }
+
+    let pushed = 0, failed = 0;
+    for (const [openid, titles] of Object.entries(userPlans)) {
+      const summary = titles.join('、').slice(0, 20);
+      const now = new Date();
+      try {
+        const result = await axios.post('http://api.weixin.qq.com/wxa/msg/subscribe/send', {
+          touser: openid,
+          template_id: TEMPLATE_ID,
+          page: 'pages/eatwhat/eatwhat',
+          data: {
+            date1: { value: `${today} ${type === 'lunch' ? '12:00' : '18:00'}` },
+            name2: { value: '美食达人' },
+            thing3: { value: summary },
+            thing4: { value: '请在用餐结束之前用餐' },
+            time15: { value: now.toISOString().replace('T', ' ').slice(0, 19) },
+          },
+        });
+        if (result.data.errcode === 0) {
+          pushed++;
+        } else {
+          failed++;
+        }
+      } catch (e) {
+        failed++;
+      }
+    }
+
+    lastPushDate[key] = today;
+    console.log(`[${type}] 推送完成: 成功 ${pushed}，失败 ${failed}`);
+  } catch (err) {
+    console.error(`[${type}] 推送异常:`, err.message);
+  }
+}
+
+function scheduleReminders() {
+  // 每 30 秒检查一次是否到点
+  setInterval(() => {
+    const now = new Date();
+    const bjHour = (now.getUTCHours() + 8) % 24;
+    const bjMin = now.getMinutes();
+
+    // 11:00 触发午餐推送（误差 30 秒内）
+    if (bjHour === 11 && bjMin === 0) {
+      pushMealReminder('lunch');
+    }
+    // 17:00 触发晚餐推送
+    if (bjHour === 17 && bjMin === 0) {
+      pushMealReminder('dinner');
+    }
+  }, 30 * 1000);
+
+  console.log('[定时器] 订阅消息推送已启动（午餐 11:00，晚餐 17:00）');
+}
+
 // ========== 注册小程序接口路由 ==========
 app.use('/api/user', userRouter);
 app.use('/api/todo', todoRouter);
@@ -369,6 +449,7 @@ init()
 
     app.listen(port, '0.0.0.0', () => {
       console.log(`服务启动，端口: ${port}`);
+      scheduleReminders();
     });
   })
   .catch((err) => {
