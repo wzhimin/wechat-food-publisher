@@ -27,9 +27,9 @@ router.post('/toggle', async (req, res) => {
     } else {
       await UserFollow.create({ followerOpenid, followingOpenid });
       // 粉丝数 +1
-      await User.increment('fans_count', { by: 1, where: { openid: followingOpenid } });
+      await User.increment('fansCount', { by: 1, where: { openid: followingOpenid } });
       // 关注数 +1
-      await User.increment('follow_count', { by: 1, where: { openid: followerOpenid } });
+      await User.increment('followCount', { by: 1, where: { openid: followerOpenid } });
       res.json({ success: true, followed: true });
     }
   } catch (err) {

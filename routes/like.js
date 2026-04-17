@@ -20,7 +20,7 @@ router.post('/toggle', async (req, res) => {
     } else {
       await RecipeLike.create({ openid, recipeId });
       // 点赞数 +1
-      await Recipe.increment('like_count', { by: 1, where: { id: recipeId } });
+      await Recipe.increment('likeCount', { by: 1, where: { id: recipeId } });
       res.json({ success: true, liked: true });
     }
   } catch (err) {

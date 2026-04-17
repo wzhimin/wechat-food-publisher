@@ -83,7 +83,7 @@ router.post('/add', async (req, res) => {
     });
 
     // 评论数 +1
-    await Recipe.increment('comment_count', { by: 1, where: { id: recipeId } });
+    await Recipe.increment('commentCount', { by: 1, where: { id: recipeId } });
 
     // 填充用户信息
     const user = await User.findOne({ where: { openid }, attributes: ['openid', 'nickName', 'avatarUrl'] });
