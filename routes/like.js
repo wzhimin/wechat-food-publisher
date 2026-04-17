@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const RecipeLike = require('../models/RecipeLike');
 const Recipe = require('../models/Recipe');
+const User = require('../models/User');
 
 // POST /api/like/toggle
 // 切换点赞状态：已点赞则取消，未点赞则添加

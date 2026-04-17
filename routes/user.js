@@ -135,16 +135,11 @@ router.get('/stats', async (req, res) => {
     const fansCount = await UserFollow.count({ where: { followingOpenid: openid } });
     // 获赞数（我发布的菜谱收到的点赞总数）
     const Recipe = require('../models/Recipe');
-    const myRecipes = await Recipe.findAll({ where: { authorOpenid: openid }, attributes: ['id'] });
-    const myRecipeIds = myRecipes.map(r => r.id);
-    let likeCount = 0;
-    if (myRecipeIds.length > 0) {
-      const likeResult = await Recipe.findAll({
-        where: { id: myRecipeIds },
-        attributes: ['likeCount'],
-      });
-      likeCount = likeResult.reduce((sum, r) => sum + (r.likeCount || 0), 0);
-    }
+    const myRecipes = await Recipe.findAll({
+      where: { authorOpenid: openid },
+      attributes: ['likeCount'],
+    });
+    const likeCount = myRecipes.reduce((sum, r) => sum + (r.likeCount || 0), 0);
 
     res.json({
       success: true,
