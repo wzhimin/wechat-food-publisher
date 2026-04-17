@@ -1,10 +1,47 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const RecipeComment = require('../models/RecipeComment');
 const Recipe = require('../models/Recipe');
 const User = require('../models/User');
 
-// GET /api/comment/list?recipeId=xxx
+// ========== 微信内容安全 — 云调用 msgSecCheck ==========
+const MINI_APP_ID = process.env.MINI_APP_ID || '';
+const MINI_APP_SECRET = process.env.MINI_APP_SECRET || '';
+let _tokenCache = null;
+let _tokenExpire = 0;
+
+async function getAccessToken() {
+  if (_tokenCache && Date.now() < _tokenExpire) return _tokenCache;
+  const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${MINI_APP_ID}&secret=${MINI_APP_SECRET}`;
+  const r = await axios.get(url).catch(() => null);
+  if (r && r.data && r.data.access_token) {
+    _tokenCache = r.data.access_token;
+    _tokenExpire = Date.now() + ((r.data.expires_in || 7200) - 300) * 1000;
+    return _tokenCache;
+  }
+  return null;
+}
+
+async function checkText(content) {
+  if (!content || !content.trim()) return true;
+  try {
+    const token = await getAccessToken();
+    if (!token) return true; // 没配置就跳过
+    const url = `https://api.weixin.qq.com/wxa/msg_sec_check?access_token=${token}`;
+    const r = await axios.post(url, { content: content.trim() }).catch(() => null);
+    if (r && r.data && r.data.errcode !== 0) {
+      console.warn('[内容审核] 文本未通过', r.data);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('[内容审核] msgSecCheck 调用失败', e.message);
+    return true; // 审核服务异常时放行，不阻断用户
+  }
+}
+
+// GET /api/comment/list
 router.get('/list', async (req, res) => {
   try {
     const { recipeId } = req.query;
@@ -15,26 +52,16 @@ router.get('/list', async (req, res) => {
       order: [['created_at', 'DESC']],
     });
 
-    // 填充评论者信息
     const openids = [...new Set(comments.map(c => c.openid))];
     const users = openids.length
       ? await User.findAll({ where: { openid: openids }, attributes: ['openid', 'nickName', 'avatarUrl'] })
       : [];
     const userMap = Object.fromEntries(users.map(u => [u.openid, u]));
 
-    // 填充回复
     const commentIds = comments.map(c => c.id);
     const replies = commentIds.length
       ? await RecipeComment.findAll({ where: { replyTo: commentIds }, order: [['created_at', 'ASC']] })
       : [];
-
-    const replyUserMap = {};
-    const replyOpenids = [...new Set(replies.map(r => r.openid))];
-    if (replyOpenids.length) {
-      const ru = await User.findAll({ where: { openid: replyOpenids }, attributes: ['openid', 'nickName', 'avatarUrl'] });
-      replyOpenids.forEach(u => { replyUserMap[u] = null; });
-      ru.forEach(u => { replyUserMap[u.openid] = u; });
-    }
 
     const replyMap = {};
     replies.forEach(r => {
@@ -42,8 +69,8 @@ router.get('/list', async (req, res) => {
       replyMap[r.replyTo].push({
         id: r.id,
         openid: r.openid,
-        nickName: (replyUserMap[r.openid] || {}).nickName || '用户',
-        avatarUrl: (replyUserMap[r.openid] || {}).avatarUrl || '',
+        nickName: (userMap[r.openid] || {}).nickName || '用户',
+        avatarUrl: (userMap[r.openid] || {}).avatarUrl || '',
         content: r.content,
         replyTo: r.replyTo,
         createdAt: r.created_at,
@@ -75,6 +102,12 @@ router.post('/add', async (req, res) => {
     if (!openid || !recipeId) return res.status(400).json({ error: '缺少 openid 或 recipeId' });
     if (!content || !content.trim()) return res.status(400).json({ error: '请输入评论内容' });
 
+    // ========== 内容安全审核 ==========
+    const passed = await checkText(content);
+    if (!passed) {
+      return res.status(403).json({ error: '评论内容未通过安全审核，请修改后重试' });
+    }
+
     const comment = await RecipeComment.create({
       openid,
       recipeId,
@@ -82,10 +115,8 @@ router.post('/add', async (req, res) => {
       replyTo: replyTo || null,
     });
 
-    // 评论数 +1
     await Recipe.increment('commentCount', { by: 1, where: { id: recipeId } });
 
-    // 填充用户信息
     const user = await User.findOne({ where: { openid }, attributes: ['openid', 'nickName', 'avatarUrl'] });
 
     res.json({

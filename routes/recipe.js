@@ -27,7 +27,8 @@ router.get('/list', async (req, res) => {
       where.tags = { [Op.like]: `%${tag}%` };
     }
     if (season) {
-      where.season = { [Op.like]: `%${season}%` };
+      // 有 season 时精确匹配，空串则查所有
+      where.season = season;
     }
 
     // 排序
@@ -66,7 +67,7 @@ router.get('/list', async (req, res) => {
 });
 
 // GET /api/recipe/hot
-// 今日推荐：从最近30条里随机取5条供轮播
+// 首页推荐：从最近100条里随机取10条供轮播
 router.get('/hot', async (req, res) => {
   try {
     const total = await Recipe.count();
@@ -74,10 +75,10 @@ router.get('/hot', async (req, res) => {
 
     const recent = await Recipe.findAll({
       order: [['created_at', 'DESC']],
-      limit: 30,
+      limit: 100,
     });
-    // 随机打乱，取前5条
-    const shuffled = recent.sort(() => Math.random() - 0.5).slice(0, 5);
+    // 随机打乱，取前10条
+    const shuffled = recent.sort(() => Math.random() - 0.5).slice(0, 10);
     res.json({ success: true, data: shuffled });
   } catch (err) {
     console.error('[/api/recipe/hot]', err.message);
