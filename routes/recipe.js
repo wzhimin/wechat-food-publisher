@@ -5,14 +5,15 @@ const Recipe = require('../models/Recipe');
 const User = require('../models/User');
 
 // GET /api/recipe/list
-// 查询菜谱列表，支持搜索、分类、时令筛选
+// 查询菜谱列表，支持搜索、分类、时令筛选、排序
 // ?kw=红烧肉  按菜名/食材搜索
 // ?tag=下饭菜  按标签筛选
 // ?season=春季  按时令筛选
+// ?sort=latest|hot|duration  排序方式（最新/最热/最短时间）
 // ?page=1&pageSize=20
 router.get('/list', async (req, res) => {
   try {
-    const { kw, tag, season, page = 1, pageSize = 20 } = req.query;
+    const { kw, tag, season, sort = 'latest', page = 1, pageSize = 20 } = req.query;
     const where = {};
 
     if (kw) {
@@ -29,10 +30,24 @@ router.get('/list', async (req, res) => {
       where.season = { [Op.like]: `%${season}%` };
     }
 
+    // 排序
+    let order;
+    switch (sort) {
+      case 'hot':
+        order = [['likeCount', 'DESC'], ['created_at', 'DESC']];
+        break;
+      case 'duration':
+        order = [['duration', 'ASC'], ['created_at', 'DESC']];
+        break;
+      case 'latest':
+      default:
+        order = [['created_at', 'DESC']];
+    }
+
     const offset = (parseInt(page) - 1) * parseInt(pageSize);
     const { count, rows } = await Recipe.findAndCountAll({
       where,
-      order: [['created_at', 'DESC']],
+      order,
       limit: parseInt(pageSize),
       offset,
     });
