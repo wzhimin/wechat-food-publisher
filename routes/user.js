@@ -129,10 +129,10 @@ router.get('/stats', async (req, res) => {
     const UserFollow = require('../models/UserFollow');
     const RecipeLike = require('../models/RecipeLike');
 
-    // 关注数
-    const followCount = await UserFollow.count({ where: { openid } });
-    // 粉丝数（我是被关注者的数量）
-    const fansCount = await UserFollow.count({ where: { targetOpenid: openid } });
+    // 关注数（我关注了多少人）
+    const followCount = await UserFollow.count({ where: { followerOpenid: openid } });
+    // 粉丝数（多少人关注了我）
+    const fansCount = await UserFollow.count({ where: { followingOpenid: openid } });
     // 获赞数（我发布的菜谱收到的点赞总数）
     const Recipe = require('../models/Recipe');
     const myRecipes = await Recipe.findAll({ where: { authorOpenid: openid }, attributes: ['id'] });
