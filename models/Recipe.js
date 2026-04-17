@@ -48,6 +48,21 @@ const Recipe = sequelize.define('Recipe', {
     type: DataTypes.DATE,
     comment: '公众号发布时间',
   },
+  authorOpenid: {
+    type: DataTypes.STRING(64),
+    defaultValue: 'system',
+    comment: '发布者openid，system表示系统导入',
+  },
+  likeCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: '点赞数',
+  },
+  commentCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: '评论数',
+  },
 }, {
   tableName: 'recipes',
   timestamps: true,

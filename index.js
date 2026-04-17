@@ -12,6 +12,12 @@ const Todo = require('./models/Todo');
 const Recipe = require('./models/Recipe');
 const Collection = require('./models/Collection');
 const MealPlan = require('./models/MealPlan');
+const BrowseHistory = require('./models/BrowseHistory');
+const Feedback = require('./models/Feedback');
+const RecipeNote = require('./models/RecipeNote');
+const RecipeLike = require('./models/RecipeLike');
+const RecipeComment = require('./models/RecipeComment');
+const UserFollow = require('./models/UserFollow');
 
 // ========== 小程序接口路由 ==========
 const userRouter = require('./routes/user');
@@ -20,6 +26,12 @@ const recipeRouter = require('./routes/recipe');
 const collectionRouter = require('./routes/collection');
 const mealRouter = require('./routes/meal');
 const { parseMarkdownRecipes } = require('./routes/recipe');
+const historyRouter = require('./routes/history');
+const feedbackRouter = require('./routes/feedback');
+const noteRouter = require('./routes/note');
+const likeRouter = require('./routes/like');
+const commentRouter = require('./routes/comment');
+const followRouter = require('./routes/follow');
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));
@@ -250,18 +262,30 @@ app.use('/api/todo', todoRouter);
 app.use('/api/recipe', recipeRouter);
 app.use('/api/collect', collectionRouter);
 app.use('/api/meal', mealRouter);
+app.use('/api/history', historyRouter);
+app.use('/api/feedback', feedbackRouter);
+app.use('/api/note', noteRouter);
+app.use('/api/like', likeRouter);
+app.use('/api/comment', commentRouter);
+app.use('/api/follow', followRouter);
 
 const port = process.env.PORT || 80;
 
 // ========== 启动 ==========
 init()
   .then(async () => {
+    // 旧模型同步
     await User.sync({ alter: 'safe' });
     await Todo.sync({ alter: 'safe' });
     await Recipe.sync({ alter: 'safe' });
-    // TODO: 部署后确认collections表正常，改回 alter: 'safe'
     await Collection.sync({ force: true });
     await MealPlan.sync({ alter: 'safe' });
+    await BrowseHistory.sync({ alter: 'safe' });
+    await Feedback.sync({ alter: 'safe' });
+    await RecipeNote.sync({ alter: 'safe' });
+    await RecipeLike.sync({ alter: 'safe' });
+    await RecipeComment.sync({ alter: 'safe' });
+    await UserFollow.sync({ alter: 'safe' });
     console.log('数据库初始化完成');
 
     app.listen(port, '0.0.0.0', () => {

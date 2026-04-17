@@ -16,6 +16,21 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING(512),
     comment: '头像URL',
   },
+  followCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: '关注数',
+  },
+  fansCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: '粉丝数',
+  },
+  likeCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: '获赞数',
+  },
 }, {
   tableName: 'users',
   timestamps: true,
