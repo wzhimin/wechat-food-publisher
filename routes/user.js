@@ -1,20 +1,44 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const User = require('../models/User');
 
-// 登录：从 callContainer header 获取真实 openid，创建或更新用户
+// 小程序 appid/secret（需在云托管环境变量中配置）
+const MINI_APP_ID = process.env.MINI_APP_ID || '';
+const MINI_APP_SECRET = process.env.MINI_APP_SECRET || '';
+
+// ========== 微信 code 换 openid ==========
+async function code2openid(code) {
+  if (!MINI_APP_ID || !MINI_APP_SECRET) {
+    throw new Error('后端未配置 MINI_APP_ID 或 MINI_APP_SECRET');
+  }
+  const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${MINI_APP_ID}&secret=${MINI_APP_SECRET}&js_code=${code}&grant_type=authorization_code`;
+  const res = await axios.get(url);
+  if (res.data.errcode) {
+    throw new Error(`微信接口返回错误: ${res.data.errmsg} (${res.data.errcode})`);
+  }
+  return res.data.openid;
+}
+
+// 登录：首次用 wx.login() 的 code 换 openid，后续用 body.openid
 // POST /api/user/login
-// Body: { nickName, avatarUrl }
+// Body: { code, nickName?, avatarUrl? }  首次登录传 code
+// Body: { openid, nickName?, avatarUrl? }  已有 openid 时传 openid
 router.post('/login', async (req, res) => {
   try {
-    // 资源复用场景下 openid 可能在不同字段
-    const openid = req.body.openid
-      || req.query.openid
-      || req.headers['x-wx-openid']
-      || req.headers['x-wx-source-openid']
-      || req.headers['x-wx-from-openid'];
+    let openid;
+
+    // 优先从 body 取 code，兑换 openid（首次登录流程）
+    if (req.body.code) {
+      openid = await code2openid(req.body.code);
+    }
+    // 兜底：从 body/query 取已有 openid（后续登录）
     if (!openid) {
-      return res.status(400).json({ error: '无法获取用户身份' });
+      openid = req.body.openid || req.query.openid;
+    }
+
+    if (!openid) {
+      return res.status(400).json({ error: '无法获取用户身份（缺少 code 或 openid）' });
     }
 
     const { nickName, avatarUrl } = req.body;
