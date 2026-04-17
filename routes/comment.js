@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const RecipeComment = require('../models/RecipeComment');
+const Recipe = require('../models/Recipe');
 const User = require('../models/User');
 
 // GET /api/comment/list?recipeId=xxx
