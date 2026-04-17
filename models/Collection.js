@@ -17,6 +17,13 @@ const Collection = sequelize.define('Collection', {
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: false,
+  indexes: [
+    {
+      unique: true,
+      fields: ['openid', 'recipeId'],
+      name: 'idx_user_recipe_unique',
+    },
+  ],
 });
 
 module.exports = Collection;
