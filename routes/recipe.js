@@ -51,19 +51,19 @@ router.get('/list', async (req, res) => {
 });
 
 // GET /api/recipe/hot
-// 今日推荐：返回最新入库的一道菜
+// 今日推荐：从最近30条里随机取5条供轮播
 router.get('/hot', async (req, res) => {
   try {
     const total = await Recipe.count();
-    if (total === 0) return res.json({ success: true, data: null });
+    if (total === 0) return res.json({ success: true, data: [] });
 
-    // 随机取一道最近30条里的菜
     const recent = await Recipe.findAll({
       order: [['created_at', 'DESC']],
       limit: 30,
     });
-    const pick = recent[Math.floor(Math.random() * recent.length)];
-    res.json({ success: true, data: pick });
+    // 随机打乱，取前5条
+    const shuffled = recent.sort(() => Math.random() - 0.5).slice(0, 5);
+    res.json({ success: true, data: shuffled });
   } catch (err) {
     console.error('[/api/recipe/hot]', err.message);
     res.status(500).json({ error: err.message });
@@ -285,6 +285,75 @@ function inferDuration(steps) {
   if (steps.length <= 5) return '30分钟';
   return '45分钟';
 }
+
+// GET /api/recipe/mine
+// 查询我发布的菜谱列表
+router.get('/mine', async (req, res) => {
+  try {
+    const openid = req.query.openid;
+    if (!openid) return res.status(400).json({ error: '缺少 openid' });
+
+    const recipes = await Recipe.findAll({
+      where: { authorOpenid: openid },
+      order: [['created_at', 'DESC']],
+    });
+    res.json({ success: true, data: recipes });
+  } catch (err) {
+    console.error('[/api/recipe/mine]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/recipe/update/:id
+// 更新我发布的菜谱
+router.post('/update/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const openid = req.body.openid;
+    if (!openid) return res.status(400).json({ error: '缺少 openid' });
+
+    const recipe = await Recipe.findByPk(id);
+    if (!recipe) return res.status(404).json({ error: '菜谱不存在' });
+    if (recipe.authorOpenid !== openid) return res.status(403).json({ error: '无权限修改' });
+
+    const { title, cover, ingredients, steps, duration, difficulty, tags, tips } = req.body;
+    await recipe.update({
+      title: title?.trim() || recipe.title,
+      cover: cover !== undefined ? cover : recipe.cover,
+      ingredients: ingredients !== undefined ? (typeof ingredients === 'string' ? ingredients : JSON.stringify(ingredients)) : recipe.ingredients,
+      steps: steps !== undefined ? (typeof steps === 'string' ? steps : JSON.stringify(steps)) : recipe.steps,
+      duration: duration || recipe.duration,
+      difficulty: difficulty !== undefined ? Number(difficulty) : recipe.difficulty,
+      tags: tags !== undefined ? tags : recipe.tags,
+      tips: tips !== undefined ? tips : recipe.tips,
+    });
+
+    res.json({ success: true, data: recipe });
+  } catch (err) {
+    console.error('[/api/recipe/update]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/recipe/delete/:id
+// 删除我发布的菜谱
+router.post('/delete/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const openid = req.body.openid;
+    if (!openid) return res.status(400).json({ error: '缺少 openid' });
+
+    const recipe = await Recipe.findByPk(id);
+    if (!recipe) return res.status(404).json({ error: '菜谱不存在' });
+    if (recipe.authorOpenid !== openid) return res.status(403).json({ error: '无权限删除' });
+
+    await recipe.destroy();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[/api/recipe/delete]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 module.exports = router;
 module.exports.parseMarkdownRecipes = parseMarkdownRecipes;

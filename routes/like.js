@@ -15,12 +15,22 @@ router.post('/toggle', async (req, res) => {
     if (existing) {
       await existing.destroy();
       // 点赞数 -1
-      await Recipe.decrement('like_count', { by: 1, where: { id: recipeId } });
+      await Recipe.decrement('likeCount', { by: 1, where: { id: recipeId } });
+      // 作者获赞数 -1
+      const recipe = await Recipe.findByPk(recipeId);
+      if (recipe && recipe.authorOpenid) {
+        await User.decrement('likeCount', { by: 1, where: { openid: recipe.authorOpenid } });
+      }
       res.json({ success: true, liked: false });
     } else {
       await RecipeLike.create({ openid, recipeId });
       // 点赞数 +1
       await Recipe.increment('likeCount', { by: 1, where: { id: recipeId } });
+      // 作者获赞数 +1
+      const recipe = await Recipe.findByPk(recipeId);
+      if (recipe && recipe.authorOpenid) {
+        await User.increment('likeCount', { by: 1, where: { openid: recipe.authorOpenid } });
+      }
       res.json({ success: true, liked: true });
     }
   } catch (err) {
@@ -46,6 +56,31 @@ router.get('/status', async (req, res) => {
     res.json({ success: true, data });
   } catch (err) {
     console.error('[/api/like/status]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/like/mine
+// 查询我点赞的菜谱列表
+router.get('/mine', async (req, res) => {
+  try {
+    const openid = req.query.openid;
+    if (!openid) return res.status(400).json({ error: '缺少 openid' });
+
+    const likes = await RecipeLike.findAll({
+      where: { openid },
+      order: [['created_at', 'DESC']],
+    });
+
+    // 查关联的菜谱详情
+    const recipeIds = likes.map(l => l.recipeId);
+    const recipes = await Recipe.findAll({
+      where: { id: recipeIds },
+    });
+
+    res.json({ success: true, data: recipes });
+  } catch (err) {
+    console.error('[/api/like/mine]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
