@@ -119,4 +119,45 @@ router.get('/profile', async (req, res) => {
   }
 });
 
+// 获取用户统计（关注数、粉丝数、获赞数）
+// GET /api/user/stats?openid=xxx
+router.get('/stats', async (req, res) => {
+  try {
+    const { openid } = req.query;
+    if (!openid) return res.status(400).json({ error: '缺少 openid' });
+
+    const UserFollow = require('../models/UserFollow');
+    const RecipeLike = require('../models/RecipeLike');
+
+    // 关注数
+    const followCount = await UserFollow.count({ where: { openid } });
+    // 粉丝数（我是被关注者的数量）
+    const fansCount = await UserFollow.count({ where: { targetOpenid: openid } });
+    // 获赞数（我发布的菜谱收到的点赞总数）
+    const Recipe = require('../models/Recipe');
+    const myRecipes = await Recipe.findAll({ where: { authorOpenid: openid }, attributes: ['id'] });
+    const myRecipeIds = myRecipes.map(r => r.id);
+    let likeCount = 0;
+    if (myRecipeIds.length > 0) {
+      const likeResult = await Recipe.findAll({
+        where: { id: myRecipeIds },
+        attributes: ['likeCount'],
+      });
+      likeCount = likeResult.reduce((sum, r) => sum + (r.likeCount || 0), 0);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        followCount,
+        fansCount,
+        likeCount,
+      },
+    });
+  } catch (err) {
+    console.error('[/api/user/stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
