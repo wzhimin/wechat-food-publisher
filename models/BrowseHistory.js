@@ -10,10 +10,12 @@ const BrowseHistory = sequelize.define('BrowseHistory', {
   recipeId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    field: 'recipe_id',
     comment: '菜谱ID',
   },
   viewedAt: {
     type: DataTypes.DATE,
+    field: 'viewed_at',
     defaultValue: DataTypes.NOW,
     comment: '浏览时间',
   },
@@ -22,8 +24,8 @@ const BrowseHistory = sequelize.define('BrowseHistory', {
   timestamps: false,
   updatedAt: false,
   indexes: [
-    { fields: ['openid', 'viewedAt'], name: 'idx_openid_time' },
-    { fields: ['openid', 'recipeId'], name: 'idx_openid_recipe' },
+    { fields: ['openid', 'viewed_at'], name: 'idx_openid_time' },
+    { fields: ['openid', 'recipe_id'], name: 'idx_openid_recipe' },
   ],
 });
 

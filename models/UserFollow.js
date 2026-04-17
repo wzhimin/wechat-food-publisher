@@ -5,11 +5,13 @@ const UserFollow = sequelize.define('UserFollow', {
   followerOpenid: {
     type: DataTypes.STRING(64),
     allowNull: false,
+    field: 'follower_openid',
     comment: '关注者openid',
   },
   followingOpenid: {
     type: DataTypes.STRING(64),
     allowNull: false,
+    field: 'following_openid',
     comment: '被关注者openid',
   },
 }, {

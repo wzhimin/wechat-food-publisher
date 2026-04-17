@@ -19,6 +19,7 @@ const MealPlan = sequelize.define('MealPlan', {
   },
   recipeId: {
     type: DataTypes.INTEGER,
+    field: 'recipe_id',
     defaultValue: null,
     comment: '关联菜谱ID，可为空',
   },
@@ -29,6 +30,7 @@ const MealPlan = sequelize.define('MealPlan', {
   },
   planDate: {
     type: DataTypes.DATEONLY,
+    field: 'plan_date',
     allowNull: false,
     comment: '计划日期',
   },

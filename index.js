@@ -278,7 +278,7 @@ init()
     await User.sync({ alter: 'safe' });
     await Todo.sync({ alter: 'safe' });
     await Recipe.sync({ alter: 'safe' });
-    await Collection.sync({ force: true });
+    await Collection.sync({ alter: 'safe' });
     await MealPlan.sync({ alter: 'safe' });
     await BrowseHistory.sync({ alter: 'safe' });
     await Feedback.sync({ alter: 'safe' });

@@ -10,6 +10,7 @@ const RecipeLike = sequelize.define('RecipeLike', {
   recipeId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    field: 'recipe_id',
     comment: '菜谱ID',
   },
 }, {
@@ -18,7 +19,7 @@ const RecipeLike = sequelize.define('RecipeLike', {
   createdAt: 'created_at',
   updatedAt: false,
   indexes: [
-    { unique: true, fields: ['openid', 'recipeId'], name: 'uk_like' },
+    { unique: true, fields: ['openid', 'recipe_id'], name: 'uk_like' },
   ],
 });
 

@@ -19,6 +19,7 @@ const RecipeNote = sequelize.define('RecipeNote', {
   },
   coverUrl: {
     type: DataTypes.STRING(512),
+    field: 'cover_url',
     defaultValue: '',
     comment: '封面图URL',
   },

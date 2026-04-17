@@ -10,6 +10,7 @@ const Collection = sequelize.define('Collection', {
   recipeId: {
     type: DataTypes.INTEGER,
     allowNull: false,
+    field: 'recipe_id',
     comment: '菜谱ID',
   },
 }, {
@@ -20,7 +21,7 @@ const Collection = sequelize.define('Collection', {
   indexes: [
     {
       unique: true,
-      fields: ['openid', 'recipeId'],
+      fields: ['openid', 'recipe_id'],
       name: 'idx_user_recipe_unique',
     },
   ],

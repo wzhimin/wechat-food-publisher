@@ -42,26 +42,37 @@ const Recipe = sequelize.define('Recipe', {
   },
   articleId: {
     type: DataTypes.STRING(64),
+    field: 'article_id',
     comment: '公众号文章素材ID',
   },
   publishedAt: {
     type: DataTypes.DATE,
+    field: 'published_at',
     comment: '公众号发布时间',
   },
   authorOpenid: {
     type: DataTypes.STRING(64),
+    field: 'author_openid',
     defaultValue: 'system',
     comment: '发布者openid，system表示系统导入',
   },
   likeCount: {
     type: DataTypes.INTEGER,
+    field: 'like_count',
     defaultValue: 0,
     comment: '点赞数',
   },
   commentCount: {
     type: DataTypes.INTEGER,
+    field: 'comment_count',
     defaultValue: 0,
     comment: '评论数',
+  },
+  viewCount: {
+    type: DataTypes.INTEGER,
+    field: 'view_count',
+    defaultValue: 0,
+    comment: '浏览数',
   },
 }, {
   tableName: 'recipes',
