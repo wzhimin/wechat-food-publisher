@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
 const Recipe = require('../models/Recipe');
+const User = require('../models/User');
 
 // GET /api/recipe/list
 // 查询菜谱列表，支持搜索、分类、时令筛选
@@ -137,6 +138,44 @@ router.post('/parse', async (req, res) => {
     res.json({ success: true, count: created.length, data: created });
   } catch (err) {
     console.error('[/api/recipe/parse]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/recipe/add
+// 小程序内发布菜谱
+// Body: { title, cover, ingredients, steps, duration, difficulty, tags, tips }
+router.post('/add', async (req, res) => {
+  try {
+    const openid = req.body.openid || req.query.openid;
+    const { title, cover, ingredients, steps, duration, difficulty, tags, tips } = req.body;
+    if (!openid) return res.status(400).json({ error: '缺少 openid' });
+    if (!title || !title.trim()) return res.status(400).json({ error: '请输入菜谱名称' });
+
+    // 检查用户存在
+    let user = await User.findOne({ where: { openid } });
+    if (!user) {
+      // 自动创建用户
+      user = await User.create({ openid, nickName: '新用户', avatarUrl: '' });
+    }
+
+    const recipe = await Recipe.create({
+      title: title.trim(),
+      cover: cover || '',
+      ingredients: typeof ingredients === 'string' ? ingredients : JSON.stringify(ingredients || []),
+      steps: typeof steps === 'string' ? steps : JSON.stringify(steps || []),
+      duration: duration || '30分钟',
+      difficulty: Number(difficulty) || 1,
+      tags: tags || '',
+      tips: tips || '',
+      authorOpenid: openid,
+      likeCount: 0,
+      commentCount: 0,
+    });
+
+    res.json({ success: true, data: recipe });
+  } catch (err) {
+    console.error('[/api/recipe/add]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
