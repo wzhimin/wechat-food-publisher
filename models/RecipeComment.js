@@ -28,7 +28,7 @@ const RecipeComment = sequelize.define('RecipeComment', {
   createdAt: 'created_at',
   updatedAt: false,
   indexes: [
-    { fields: ['recipe_id', 'created_at'], name: 'idx_recipe_time' },
+    { fields: ['recipeId', 'created_at'], name: 'idx_recipe_time' },
   ],
 });
 
