@@ -8,7 +8,9 @@ const User = require('../models/User');
 router.post('/login', async (req, res) => {
   try {
     // 资源复用场景下 openid 可能在不同字段
-    const openid = req.headers['x-wx-openid']
+    const openid = req.body.openid
+      || req.query.openid
+      || req.headers['x-wx-openid']
       || req.headers['x-wx-source-openid']
       || req.headers['x-wx-from-openid'];
     if (!openid) {
