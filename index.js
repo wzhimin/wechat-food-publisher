@@ -256,6 +256,85 @@ app.post('/api/upload-image', async (req, res) => {
   }
 });
 
+// ========== 订阅消息推送 ==========
+// POST /api/push/meal-reminder
+// 由云托管定时器触发，推送用餐提醒
+app.post('/api/push/meal-reminder', async (req, res) => {
+  try {
+    const { type } = req.body; // 'lunch' 或 'dinner'
+    if (!type || !['lunch', 'dinner'].includes(type)) {
+      return res.status(400).json({ error: '缺少或无效的 type 参数' });
+    }
+
+    // 模板 ID
+    const TEMPLATE_ID = 'rS11TYryYUWVa1mzNguH9My99fcEcSZhrnoMw4WtkkQ';
+
+    // 查询今日该时段的计划
+    const today = new Date().toISOString().slice(0, 10);
+    const plans = await MealPlan.findAll({
+      where: { planDate: today, type },
+    });
+
+    if (plans.length === 0) {
+      return res.json({ success: true, message: '今日无计划', pushed: 0 });
+    }
+
+    // 按 openid 分组
+    const userPlans = {};
+    for (const p of plans) {
+      if (!userPlans[p.openid]) userPlans[p.openid] = [];
+      userPlans[p.openid].push(p.title);
+    }
+
+    let pushed = 0;
+    let failed = 0;
+
+    // 逐个推送
+    for (const [openid, titles] of Object.entries(userPlans)) {
+      const summary = titles.join('、').slice(0, 20); // 限制 20 字
+      const now = new Date();
+      const timeStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${type === 'lunch' ? '11:00' : '17:00'}`;
+
+      try {
+        // 云托管开放接口服务：直接调用 http://api.weixin.qq.com/
+        const result = await axios.post('http://api.weixin.qq.com/wxa/msg/subscribe/send', {
+          touser: openid,
+          template_id: TEMPLATE_ID,
+          page: 'pages/eatwhat/eatwhat',
+          data: {
+            date1: { value: `${today} ${type === 'lunch' ? '12:00' : '18:00'}` },  // 用餐时间
+            name2: { value: '美食达人' },                                           // 用餐人
+            thing3: { value: summary },                                              // 点餐内容
+            thing4: { value: '请在用餐结束之前用餐' },                                // 备注
+            time15: { value: now.toISOString().replace('T', ' ').slice(0, 19) },    // 订购时间
+          },
+        });
+
+        if (result.data.errcode === 0) {
+          pushed++;
+          console.log(`[推送成功] ${openid}: ${summary}`);
+        } else {
+          failed++;
+          console.error(`[推送失败] ${openid}:`, result.data);
+        }
+      } catch (e) {
+        failed++;
+        console.error(`[推送异常] ${openid}:`, e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `推送完成: 成功 ${pushed}，失败 ${failed}`,
+      pushed,
+      failed,
+    });
+  } catch (err) {
+    console.error('[推送错误]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== 注册小程序接口路由 ==========
 app.use('/api/user', userRouter);
 app.use('/api/todo', todoRouter);
