@@ -10,7 +10,7 @@ const RecipeComment = sequelize.define('RecipeComment', {
   recipeId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    field: 'recipe_id',
+
     comment: '菜谱ID',
   },
   content: {
@@ -21,7 +21,7 @@ const RecipeComment = sequelize.define('RecipeComment', {
   replyTo: {
     type: DataTypes.INTEGER,
     allowNull: true,
-    field: 'reply_to',
+
     comment: '回复的评论ID',
   },
 }, {

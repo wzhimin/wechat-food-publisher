@@ -10,12 +10,12 @@ const BrowseHistory = sequelize.define('BrowseHistory', {
   recipeId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    field: 'recipe_id',
+
     comment: '菜谱ID',
   },
   viewedAt: {
     type: DataTypes.DATE,
-    field: 'viewed_at',
+
     defaultValue: DataTypes.NOW,
     comment: '浏览时间',
   },

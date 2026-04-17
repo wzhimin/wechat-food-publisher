@@ -10,7 +10,7 @@ const Collection = sequelize.define('Collection', {
   recipeId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    field: 'recipe_id',
+
     comment: '菜谱ID',
   },
 }, {
