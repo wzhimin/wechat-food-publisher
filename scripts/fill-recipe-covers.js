@@ -2,7 +2,8 @@
 /**
  * 菜谱封面图批量补充工具
  * 
- * 策略：Pixabay 搜索 → 智能降级（别名/食材/英文关键词）→ 直连数据库更新
+ * 策略：Pixabay 搜索 → 智能降级（别名/食材/英文关键词）
+ * 通过云端 HTTP API 更新数据库
  * 
  * 用法:
  *   node scripts/fill-recipe-covers.js
@@ -11,26 +12,64 @@
  * 
  * 环境变量:
  *   PIXABAY_API_KEY  - Pixabay API Key
+ *   API_BASE         - 后端地址（默认已有）
  */
 
-const { Op } = require('sequelize');
-const { sequelize } = require('../db');
-const Recipe = require('../models/Recipe');
+const https = require('https');
 
 // ========== 配置 ==========
 const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY || '';
-const https = require('https');
+const API_BASE = process.env.API_BASE || 'https://express-yi42-246142-8-1421971309.sh.run.tcloudbase.com';
 
 // 解析命令行参数
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const limit = parseInt(args.find(a => a.startsWith('--limit='))?.split('=')[1]) || 50;
-const delayMs = 1000; // API 调用间隔
+const delayMs = 1200; // API 调用间隔
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// ========== HTTP 工具 ==========
+function httpGet(path) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(path, API_BASE);
+    https.get(url, res => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } catch { reject(new Error(data)); }
+      });
+    }).on('error', reject);
+  });
+}
+
+function httpPost(path, body) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify(body);
+    const url = new URL(path, API_BASE);
+    const opts = {
+      hostname: url.hostname,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+    };
+    const req = https.request(opts, res => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } catch { reject(new Error(data)); }
+      });
+    });
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 // ========== 搜索关键词映射 ==========
-// 中文别名 → 更通用的搜索词
 const ALIAS_MAP = {
   '西红柿炒鸡蛋': '番茄炒蛋',
   '西红柿鸡蛋': '番茄炒蛋',
@@ -40,7 +79,6 @@ const ALIAS_MAP = {
   '糖醋里脊': '糖醋肉',
 };
 
-// 英文翻译（针对中国特色菜）
 const EN_MAP = {
   '红烧肉': 'braised pork belly chinese food',
   '宫保鸡丁': 'kung pao chicken',
@@ -71,51 +109,33 @@ const EN_MAP = {
 // ========== 智能关键词生成 ==========
 function generateKeywords(title) {
   const keywords = [];
-
-  // 1. 别名映射
   if (ALIAS_MAP[title]) {
     keywords.push({ kw: ALIAS_MAP[title], label: `别名: ${ALIAS_MAP[title]}` });
   }
-
-  // 2. 原标题
   keywords.push({ kw: title, label: `原标题: ${title}` });
-
-  // 3. 英文翻译
   if (EN_MAP[title]) {
     keywords.push({ kw: EN_MAP[title], label: `英文: ${EN_MAP[title]}` });
   }
-
-  // 4. 提取主要食材
   const ingredients = extractMainIngredient(title);
   if (ingredients && ingredients !== title) {
     keywords.push({ kw: ingredients, label: `食材: ${ingredients}` });
   }
-
-  // 5. 去"做法"前缀（红烧/清蒸/凉拌等）
   const baseFood = stripCookingMethod(title);
   if (baseFood && baseFood.length >= 2) {
     keywords.push({ kw: baseFood, label: `去前缀: ${baseFood}` });
   }
-
   return keywords;
 }
 
 function extractMainIngredient(title) {
   const patterns = [
     /(?:红烧|清蒸|凉拌|蒜蓉|糖醋|酸辣|水煮|干锅|黄焖|葱油|白灼|酱爆|爆炒|油炸|烤)(.*)/,
-    /(.*)肉$/,
-    /(.*)鱼$/,
-    /(.*)鸡$/,
-    /(.*)虾$/,
-    /(.*)排骨$/,
-    /(.*)牛肉$/,
-    /(.*)羊肉$/,
+    /(.*)肉$/, /(.*)鱼$/, /(.*)鸡$/, /(.*)虾$/,
+    /(.*)排骨$/, /(.*)牛肉$/, /(.*)羊肉$/,
   ];
   for (const pattern of patterns) {
     const match = title.match(pattern);
-    if (match && match[1] && match[1].length >= 1) {
-      return match[1];
-    }
+    if (match && match[1] && match[1].length >= 1) return match[1];
   }
   return null;
 }
@@ -127,9 +147,7 @@ function stripCookingMethod(title) {
 // ========== Pixabay 图片搜索 ==========
 async function searchPixabay(query) {
   if (!PIXABAY_API_KEY) return null;
-
   const url = `https://pixabay.com/api/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(query)}&image_type=photo&per_page=5&safesearch=true`;
-
   return new Promise((resolve) => {
     https.get(url, res => {
       let data = '';
@@ -139,18 +157,11 @@ async function searchPixabay(query) {
           const json = JSON.parse(data);
           if (json.hits && json.hits.length > 0) {
             const hit = json.hits[0];
-            // 用 webformatURL（960px），适合小程序
-            resolve({
-              url: hit.webformatURL,
-              source: 'Pixabay',
-              photographer: hit.user,
-            });
+            resolve({ url: hit.webformatURL, source: 'Pixabay', photographer: hit.user });
           } else {
             resolve(null);
           }
-        } catch {
-          resolve(null);
-        }
+        } catch { resolve(null); }
       });
     }).on('error', () => resolve(null));
   });
@@ -159,15 +170,12 @@ async function searchPixabay(query) {
 // 智能搜索：逐级降级
 async function findCoverImage(title) {
   const keywords = generateKeywords(title);
-
   for (const { kw, label } of keywords) {
     console.log(`    🔍 ${label}`);
-
     const result = await searchPixabay(kw);
     if (result) return result;
-    await sleep(300); // API 间隔
+    await sleep(300);
   }
-
   return null;
 }
 
@@ -177,48 +185,44 @@ async function main() {
   console.log('  味口小程序 - 菜谱封面图批量补充工具');
   console.log('═══════════════════════════════════════\n');
 
-  // 检查 API Key
   if (!PIXABAY_API_KEY) {
     console.log('❌ 未设置 PIXABAY_API_KEY 环境变量');
-    console.log('   export PIXABAY_API_KEY="你的Key"');
     process.exit(1);
   }
   console.log(`✅ Pixabay API Key: 已设置`);
-
+  console.log(`📡 后端地址: ${API_BASE}`);
   console.log(`🔧 模式: ${dryRun ? '试运行（只搜索不更新）' : '正式模式（会更新数据库）'}`);
   console.log(`📊 批次大小: ${limit}\n`);
 
-  // 连接数据库
-  await sequelize.authenticate();
-  console.log('✅ 数据库连接成功\n');
+  // 拉取菜谱列表
+  console.log('📦 拉取菜谱数据...');
+  const res = await httpGet('/api/recipe/list?page=1&pageSize=200');
+  if (!res.success) {
+    console.error('❌ 拉取失败:', res);
+    process.exit(1);
+  }
 
-  // 查询无封面的菜谱
-  const noCoverRecipes = await Recipe.findAll({
-    where: {
-      [Op.or]: [
-        { cover: null },
-        { cover: '' },
-      ],
-    },
-    order: [['created_at', 'ASC']],
-    limit,
-  });
+  const allRecipes = res.data;
+  console.log(`📊 总共 ${res.total} 道菜谱\n`);
 
-  console.log(`🎯 本次处理: ${noCoverRecipes.length} 道\n`);
+  // 筛选无封面的
+  const noCover = allRecipes.filter(r => !r.cover || r.cover === '');
+  console.log(`📭 无封面: ${noCover.length} 道\n`);
 
-  if (noCoverRecipes.length === 0) {
+  if (noCover.length === 0) {
     console.log('✅ 所有菜谱已有封面，无需处理！');
     process.exit(0);
   }
 
-  // 统计
-  let success = 0;
-  let failed = 0;
+  const batch = noCover.slice(0, limit);
+  console.log(`🎯 本次处理: ${batch.length} 道\n`);
+
+  let success = 0, failed = 0;
   const failedTitles = [];
 
-  for (let i = 0; i < noCoverRecipes.length; i++) {
-    const recipe = noCoverRecipes[i];
-    console.log(`[${i + 1}/${noCoverRecipes.length}] ${recipe.title}`);
+  for (let i = 0; i < batch.length; i++) {
+    const recipe = batch[i];
+    console.log(`[${i + 1}/${batch.length}] ${recipe.title}`);
 
     const result = await findCoverImage(recipe.title);
 
@@ -227,9 +231,25 @@ async function main() {
       console.log(`    🖼️  ${result.url.slice(0, 80)}...`);
 
       if (!dryRun) {
-        await recipe.update({ cover: result.url });
-        console.log(`    💾 已更新数据库`);
-        success++;
+        try {
+          // 用管理员接口更新（不需要 openid 权限校验）
+          const updateRes = await httpPost('/api/admin/update-cover', {
+            id: recipe.id,
+            cover: result.url,
+          });
+          if (updateRes.success) {
+            console.log(`    💾 已更新数据库`);
+            success++;
+          } else {
+            console.log(`    ❌ 更新失败: ${updateRes.error}`);
+            failed++;
+            failedTitles.push(recipe.title);
+          }
+        } catch (e) {
+          console.log(`    ❌ 更新请求失败: ${e.message}`);
+          failed++;
+          failedTitles.push(recipe.title);
+        }
       } else {
         success++;
       }
@@ -241,8 +261,7 @@ async function main() {
 
     console.log('');
 
-    // API 速率限制
-    if (i < noCoverRecipes.length - 1) {
+    if (i < batch.length - 1) {
       await sleep(delayMs);
     }
   }
@@ -260,13 +279,10 @@ async function main() {
     console.log('\n💡 建议: 对这些菜谱使用 AI 生成（通义万相）或手动添加');
   }
 
-  // 统计剩余
-  const remainingTotal = await Recipe.count({
-    where: { [Op.or]: [{ cover: null }, { cover: '' }] },
-  });
-  if (remainingTotal > 0) {
-    console.log(`\n⚠️  还有 ${remainingTotal} 道无封面，可再次运行:`);
-    console.log(`   node scripts/fill-recipe-covers.js --limit=${Math.min(50, remainingTotal)}`);
+  const remaining = noCover.length - limit;
+  if (remaining > 0) {
+    console.log(`\n⚠️  还有 ${remaining} 道无封面，可再次运行`);
+    console.log(`   node scripts/fill-recipe-covers.js --limit=${Math.min(50, remaining)}`);
   } else {
     console.log('\n🎉 全部处理完成！');
   }
@@ -275,8 +291,6 @@ async function main() {
     console.log('\n⚠️  这是试运行模式，未写入数据库');
     console.log('   确认效果后，去掉 --dry-run 参数正式运行');
   }
-
-  process.exit(0);
 }
 
 main().catch(err => {

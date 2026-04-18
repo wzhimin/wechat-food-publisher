@@ -504,6 +504,84 @@ app.post('/api/admin/update-cover', async (req, res) => {
   }
 });
 
+// ========== 个性化推荐接口 ==========
+// GET /api/recipe/recommend?openid=xxx&limit=5
+// 根据用户浏览历史和点赞历史，推荐相似标签的菜谱
+app.get('/api/recipe/recommend', async (req, res) => {
+  try {
+    const { openid, limit = 5 } = req.query;
+    if (!openid) return res.status(400).json({ error: '缺少 openid' });
+
+    const BrowseHistory = require('./models/BrowseHistory');
+    const RecipeLike = require('./models/RecipeLike');
+    const Collection = require('./models/Collection');
+    const { Op } = require('sequelize');
+
+    // 获取用户浏览/点赞/收藏的菜谱标签
+    const [history, likes, collects] = await Promise.all([
+      BrowseHistory.findAll({ where: { openid }, limit: 50, order: [['viewedAt', 'DESC']] }),
+      RecipeLike.findAll({ where: { openid }, limit: 50 }),
+      Collection.findAll({ where: { openid }, limit: 50 }),
+    ]);
+
+    const recipeIds = [...new Set([
+      ...history.map(h => h.recipeId),
+      ...likes.map(l => l.recipeId),
+      ...collects.map(c => c.recipeId || c.recipe_id),
+    ])];
+
+    if (recipeIds.length === 0) {
+      // 无历史 → 返回随机菜谱
+      const random = await Recipe.findAll({ order: sequelize.random(), limit: parseInt(limit) });
+      return res.json({ success: true, data: random, reason: 'random' });
+    }
+
+    // 获取这些菜谱的标签
+    const interacted = await Recipe.findAll({ where: { id: recipeIds } });
+    const tagCount = {};
+    interacted.forEach(r => {
+      if (r.tags) {
+        r.tags.split(',').forEach(t => {
+          const tag = t.trim();
+          if (tag) tagCount[tag] = (tagCount[tag] || 0) + 1;
+        });
+      }
+    });
+
+    // 排序取热门标签
+    const topTags = Object.entries(tagCount)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([tag]) => tag);
+
+    if (topTags.length === 0) {
+      const random = await Recipe.findAll({ order: sequelize.random(), limit: parseInt(limit) });
+      return res.json({ success: true, data: random, reason: 'random' });
+    }
+
+    // 查找有这些标签但用户没看过的菜谱
+    const whereClause = {
+      tags: { [Op.or]: topTags.map(tag => ({ [Op.like]: `%${tag}%` })) },
+      id: { [Op.notIn]: recipeIds },
+    };
+    const recommended = await Recipe.findAll({
+      where: whereClause,
+      order: sequelize.random(),
+      limit: parseInt(limit) + 5, // 多取一些备用
+    });
+
+    res.json({
+      success: true,
+      data: recommended.slice(0, parseInt(limit)),
+      reason: topTags.join('、'),
+      topTags,
+    });
+  } catch (err) {
+    console.error('[/api/recipe/recommend]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== 注册小程序接口路由 ==========
 app.use('/api/user', userRouter);
 app.use('/api/todo', todoRouter);
