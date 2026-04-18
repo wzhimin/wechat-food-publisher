@@ -162,9 +162,11 @@ app.post('/api/recipe/sync', async (req, res) => {
       return res.json({ success: true, count: 0, message: '未解析到菜谱，可能不是菜谱类文章' });
     }
 
-    const created = await Recipe.bulkCreate(recipes, { ignoreDuplicates: true });
-    console.log(`[菜谱同步] 成功入库 ${created.length} 道菜：${recipes.map(r => r.title).join(', ')}`);
-    res.json({ success: true, count: created.length, data: created });
+    const created = await Recipe.bulkCreate(recipes, {
+      updateOnDuplicate: ['ingredients', 'steps', 'tips', 'tags', 'season', 'difficulty', 'duration', 'cover', 'updatedAt'],
+    });
+    console.log(`[菜谱同步] 处理 ${recipes.length} 道菜（新增+更新）：${recipes.map(r => r.title).join(', ')}`);
+    res.json({ success: true, count: recipes.length, data: created });
   } catch (err) {
     console.error('[/api/recipe/sync]', err.message);
     res.status(500).json({ error: err.message });
@@ -237,7 +239,7 @@ app.post('/api/publish', async (req, res) => {
           publishedAt: new Date(),
         });
         if (recipes.length > 0) {
-          await Recipe.bulkCreate(recipes, { ignoreDuplicates: true });
+          await Recipe.bulkCreate(recipes, { updateOnDuplicate: ["ingredients", "steps", "tips", "tags", "season", "difficulty", "duration", "cover", "updatedAt"] });
           console.log(`[菜谱入库] 成功入库 ${recipes.length} 道菜：${recipes.map(r => r.title).join(', ')}`);
         } else {
           console.log('[菜谱入库] 未解析到菜谱，可能不是菜谱类文章');
@@ -283,7 +285,7 @@ app.post('/api/draft', async (req, res) => {
           publishedAt: new Date(),
         });
         if (recipes.length > 0) {
-          await Recipe.bulkCreate(recipes, { ignoreDuplicates: true });
+          await Recipe.bulkCreate(recipes, { updateOnDuplicate: ["ingredients", "steps", "tips", "tags", "season", "difficulty", "duration", "cover", "updatedAt"] });
           console.log(`[菜谱入库] 成功入库 ${recipes.length} 道菜：${recipes.map(r => r.title).join(', ')}`);
         } else {
           console.log('[菜谱入库] 未解析到菜谱，可能不是菜谱类文章');
@@ -515,6 +517,24 @@ init()
     await RecipeComment.sync({ alter: 'safe' });
     await UserFollow.sync({ alter: 'safe' });
     console.log('数据库初始化完成');
+
+    // 确保 recipes.title 唯一索引存在（用于菜谱去重 upsert）
+    try {
+      const { sequelize } = require('./db');
+      const indexes = await sequelize.query("SHOW INDEX FROM recipes WHERE Key_name = 'recipes_title_unique'", { type: sequelize.QueryTypes.SELECT });
+      if (indexes.length === 0) {
+        // 先清理重复 title，保留最新一条
+        await sequelize.query(`
+          DELETE r1 FROM recipes r1
+          INNER JOIN recipes r2
+          ON r1.title = r2.title AND r1.id < r2.id
+        `);
+        await sequelize.query('ALTER TABLE recipes ADD UNIQUE INDEX recipes_title_unique (title)');
+        console.log('[索引] 已创建 recipes.title 唯一索引');
+      }
+    } catch (err) {
+      console.error('[索引] 创建唯一索引失败:', err.message);
+    }
 
     app.listen(port, '0.0.0.0', () => {
       console.log(`服务启动，端口: ${port}`);
