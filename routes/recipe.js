@@ -309,8 +309,13 @@ router.get('/mine', async (req, res) => {
     const openid = req.query.openid;
     if (!openid) return res.status(400).json({ error: '缺少 openid' });
 
+    const where = { authorOpenid: openid };
+    if (req.query.filter === 'liked') {
+      where.likeCount = { [require('sequelize').Op.gt]: 0 };
+    }
+
     const recipes = await Recipe.findAll({
-      where: { authorOpenid: openid },
+      where,
       order: [['created_at', 'DESC']],
     });
     res.json({ success: true, data: recipes });
