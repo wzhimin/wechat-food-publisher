@@ -126,6 +126,51 @@ async function getDefaultThumbMediaId() {
   return defaultThumbMediaId;
 }
 
+// ========== HTML 转纯文本（用于从 HTML 内容中解析菜谱）==========
+function stripHtml(html) {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+}
+
+// ========== 菜谱同步接口 ==========
+// POST /api/recipe/sync
+// 公众号发布后，将 markdown 原文中的菜谱同步入库
+// Body: { markdown, articleId? }
+app.post('/api/recipe/sync', async (req, res) => {
+  try {
+    const { markdown, articleId } = req.body;
+    if (!markdown) return res.status(400).json({ error: '缺少 markdown' });
+
+    const recipes = parseMarkdownRecipes(markdown, {
+      cover: null,
+      articleId: articleId || null,
+      publishedAt: new Date(),
+    });
+
+    if (recipes.length === 0) {
+      return res.json({ success: true, count: 0, message: '未解析到菜谱，可能不是菜谱类文章' });
+    }
+
+    const created = await Recipe.bulkCreate(recipes, { ignoreDuplicates: true });
+    console.log(`[菜谱同步] 成功入库 ${created.length} 道菜：${recipes.map(r => r.title).join(', ')}`);
+    res.json({ success: true, count: created.length, data: created });
+  } catch (err) {
+    console.error('[/api/recipe/sync]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== 路由 ==========
 
 // 健康检查
@@ -181,6 +226,27 @@ app.post('/api/publish', async (req, res) => {
       message: autoPublish ? '草稿已创建并提交发布' : '草稿已创建，请手动发布',
     });
 
+    // 发布成功后自动解析菜谱入库（异步，不阻塞响应）
+    setImmediate(async () => {
+      try {
+        // content 可能是 HTML，需要提取纯文本再解析
+        const markdown = stripHtml(content);
+        const recipes = parseMarkdownRecipes(markdown, {
+          cover: null,
+          articleId: draftMediaId,
+          publishedAt: new Date(),
+        });
+        if (recipes.length > 0) {
+          await Recipe.bulkCreate(recipes, { ignoreDuplicates: true });
+          console.log(`[菜谱入库] 成功入库 ${recipes.length} 道菜：${recipes.map(r => r.title).join(', ')}`);
+        } else {
+          console.log('[菜谱入库] 未解析到菜谱，可能不是菜谱类文章');
+        }
+      } catch (err) {
+        console.error('[菜谱入库] 失败:', err.message);
+      }
+    });
+
   } catch (err) {
     console.error('发布失败:', err.message);
     res.status(500).json({
@@ -210,7 +276,8 @@ app.post('/api/draft', async (req, res) => {
     // 发布成功后自动解析菜谱入库（异步，不阻塞响应）
     setImmediate(async () => {
       try {
-        const recipes = parseMarkdownRecipes(content, {
+        const markdown = stripHtml(content);
+        const recipes = parseMarkdownRecipes(markdown, {
           cover: null,
           articleId: draftMediaId,
           publishedAt: new Date(),
@@ -218,6 +285,8 @@ app.post('/api/draft', async (req, res) => {
         if (recipes.length > 0) {
           await Recipe.bulkCreate(recipes, { ignoreDuplicates: true });
           console.log(`[菜谱入库] 成功入库 ${recipes.length} 道菜：${recipes.map(r => r.title).join(', ')}`);
+        } else {
+          console.log('[菜谱入库] 未解析到菜谱，可能不是菜谱类文章');
         }
       } catch (err) {
         console.error('[菜谱入库] 失败:', err.message);
