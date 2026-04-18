@@ -28,6 +28,7 @@ const mealRouter = require('./routes/meal');
 const { parseMarkdownRecipes } = require('./routes/recipe');
 const historyRouter = require('./routes/history');
 const feedbackRouter = require('./routes/feedback');
+const { fillCoversForRecipes } = require('./scripts/fill-recipe-covers');
 const noteRouter = require('./routes/note');
 const likeRouter = require('./routes/like');
 const commentRouter = require('./routes/comment');
@@ -167,6 +168,19 @@ app.post('/api/recipe/sync', async (req, res) => {
     });
     console.log(`[菜谱同步] 处理 ${recipes.length} 道菜（新增+更新）：${recipes.map(r => r.title).join(', ')}`);
     res.json({ success: true, count: recipes.length, data: created });
+
+    // 异步补全封面
+    setImmediate(async () => {
+      try {
+        const noCover = created.filter(r => !r.cover || r.cover === '');
+        if (noCover.length > 0) {
+          console.log(`[菜谱同步] 开始补全 ${noCover.length} 道无封面菜谱...`);
+          await fillCoversForRecipes(noCover.map(r => ({ id: r.id, title: r.title, cover: r.cover })));
+        }
+      } catch (e) {
+        console.error('[菜谱同步] 补封面出错:', e.message);
+      }
+    });
   } catch (err) {
     console.error('[/api/recipe/sync]', err.message);
     res.status(500).json({ error: err.message });

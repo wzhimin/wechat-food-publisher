@@ -10,22 +10,16 @@
  *   node scripts/fill-recipe-covers.js --dry-run    # 只搜索不更新
  *   node scripts/fill-recipe-covers.js --limit=20   # 只处理前20条
  * 
- * 环境变量:
- *   PIXABAY_API_KEY  - Pixabay API Key
- *   API_BASE         - 后端地址（默认已有）
+ * 也可作为模块导入：
+ *   const { fillCoversForRecipes } = require('./scripts/fill-recipe-covers');
+ *   await fillCoversForRecipes([{ id: 1, title: '红烧肉' }]);
  */
 
 const https = require('https');
 
 // ========== 配置 ==========
-const PIXABAY_API_KEY = process.env.PIXABAY_API_KEY || '';
+const PIXABAY_API_KEY = '55448016-5bb57529981c9058bfeb1153c';
 const API_BASE = process.env.API_BASE || 'https://express-yi42-246142-8-1421971309.sh.run.tcloudbase.com';
-
-// 解析命令行参数
-const args = process.argv.slice(2);
-const dryRun = args.includes('--dry-run');
-const limit = parseInt(args.find(a => a.startsWith('--limit='))?.split('=')[1]) || 50;
-const delayMs = 1200; // API 调用间隔
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -146,7 +140,6 @@ function stripCookingMethod(title) {
 
 // ========== Pixabay 图片搜索 ==========
 async function searchPixabay(query) {
-  if (!PIXABAY_API_KEY) return null;
   const url = `https://pixabay.com/api/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(query)}&image_type=photo&per_page=5&safesearch=true`;
   return new Promise((resolve) => {
     https.get(url, res => {
@@ -171,27 +164,101 @@ async function searchPixabay(query) {
 async function findCoverImage(title) {
   const keywords = generateKeywords(title);
   for (const { kw, label } of keywords) {
-    console.log(`    🔍 ${label}`);
     const result = await searchPixabay(kw);
-    if (result) return result;
+    if (result) {
+      console.log(`    🖼️  ${label} → 找到`);
+      return result;
+    }
     await sleep(300);
   }
   return null;
 }
 
-// ========== 主函数 ==========
+// ========== 核心函数（可导出） ==========
+/**
+ * 为指定菜谱列表补全封面
+ * @param {Array} recipes - 菜谱列表，每项需包含 { id, title, cover? }
+ * @param {Object} options - { dryRun?: boolean, delayMs?: number }
+ * @returns {Object} { success: number, failed: number, failedTitles: string[] }
+ */
+async function fillCoversForRecipes(recipes, options = {}) {
+  const { dryRun = false, delayMs = 1200 } = options;
+  
+  if (!recipes || recipes.length === 0) {
+    return { success: 0, failed: 0, failedTitles: [] };
+  }
+
+  // 只处理无封面的
+  const noCover = recipes.filter(r => !r.cover || r.cover === '');
+  if (noCover.length === 0) {
+    console.log('[补封面] 所有菜谱已有封面');
+    return { success: 0, failed: 0, failedTitles: [] };
+  }
+
+  console.log(`[补封面] 开始处理 ${noCover.length} 道无封面菜谱`);
+  
+  let success = 0, failed = 0;
+  const failedTitles = [];
+
+  for (let i = 0; i < noCover.length; i++) {
+    const recipe = noCover[i];
+    console.log(`[补封面] [${i + 1}/${noCover.length}] ${recipe.title}`);
+
+    const result = await findCoverImage(recipe.title);
+
+    if (result) {
+      console.log(`[补封面]     ✅ ${result.url.slice(0, 60)}...`);
+
+      if (!dryRun) {
+        try {
+          const updateRes = await httpPost('/api/admin/update-cover', {
+            id: recipe.id,
+            cover: result.url,
+          });
+          if (updateRes.success) {
+            success++;
+          } else {
+            console.log(`[补封面]     ❌ 更新失败: ${updateRes.error}`);
+            failed++;
+            failedTitles.push(recipe.title);
+          }
+        } catch (e) {
+          console.log(`[补封面]     ❌ 请求失败: ${e.message}`);
+          failed++;
+          failedTitles.push(recipe.title);
+        }
+      } else {
+        success++;
+      }
+    } else {
+      console.log(`[补封面]     ❌ 未找到图片`);
+      failed++;
+      failedTitles.push(recipe.title);
+    }
+
+    if (i < noCover.length - 1) {
+      await sleep(delayMs);
+    }
+  }
+
+  console.log(`[补封面] 完成: 成功 ${success}, 失败 ${failed}`);
+  return { success, failed, failedTitles };
+}
+
+// ========== CLI 入口 ==========
 async function main() {
   console.log('═══════════════════════════════════════');
   console.log('  味口小程序 - 菜谱封面图批量补充工具');
   console.log('═══════════════════════════════════════\n');
 
-  if (!PIXABAY_API_KEY) {
-    console.log('❌ 未设置 PIXABAY_API_KEY 环境变量');
-    process.exit(1);
-  }
-  console.log(`✅ Pixabay API Key: 已设置`);
+  // 解析命令行参数
+  const args = process.argv.slice(2);
+  const dryRun = args.includes('--dry-run');
+  const limit = parseInt(args.find(a => a.startsWith('--limit='))?.split('=')[1]) || 50;
+
+  console.log(`✅ Pixabay API Key: 已配置`);
   console.log(`📡 后端地址: ${API_BASE}`);
-  console.log(`🔧 模式: ${dryRun ? '试运行（只搜索不更新）' : '正式模式（会更新数据库）'}`);
+  console.log(`🔧 模式: ${dryRun ? '试运行' : '正式模式'}`);
   console.log(`📊 批次大小: ${limit}\n`);
 
   // 拉取菜谱列表
@@ -205,95 +272,40 @@ async function main() {
   const allRecipes = res.data;
   console.log(`📊 总共 ${res.total} 道菜谱\n`);
 
-  // 筛选无封面的
-  const noCover = allRecipes.filter(r => !r.cover || r.cover === '');
-  console.log(`📭 无封面: ${noCover.length} 道\n`);
+  const batch = allRecipes.filter(r => !r.cover || r.cover === '').slice(0, limit);
+  console.log(`📭 无封面: ${batch.length} 道（本次处理）\n`);
 
-  if (noCover.length === 0) {
-    console.log('✅ 所有菜谱已有封面，无需处理！');
+  if (batch.length === 0) {
+    console.log('✅ 所有菜谱已有封面！');
     process.exit(0);
   }
 
-  const batch = noCover.slice(0, limit);
-  console.log(`🎯 本次处理: ${batch.length} 道\n`);
+  const result = await fillCoversForRecipes(batch, { dryRun, delayMs: 1200 });
 
-  let success = 0, failed = 0;
-  const failedTitles = [];
-
-  for (let i = 0; i < batch.length; i++) {
-    const recipe = batch[i];
-    console.log(`[${i + 1}/${batch.length}] ${recipe.title}`);
-
-    const result = await findCoverImage(recipe.title);
-
-    if (result) {
-      console.log(`    ✅ ${result.source} | 摄影师: ${result.photographer}`);
-      console.log(`    🖼️  ${result.url.slice(0, 80)}...`);
-
-      if (!dryRun) {
-        try {
-          // 用管理员接口更新（不需要 openid 权限校验）
-          const updateRes = await httpPost('/api/admin/update-cover', {
-            id: recipe.id,
-            cover: result.url,
-          });
-          if (updateRes.success) {
-            console.log(`    💾 已更新数据库`);
-            success++;
-          } else {
-            console.log(`    ❌ 更新失败: ${updateRes.error}`);
-            failed++;
-            failedTitles.push(recipe.title);
-          }
-        } catch (e) {
-          console.log(`    ❌ 更新请求失败: ${e.message}`);
-          failed++;
-          failedTitles.push(recipe.title);
-        }
-      } else {
-        success++;
-      }
-    } else {
-      console.log(`    ❌ 未找到合适图片`);
-      failed++;
-      failedTitles.push(recipe.title);
-    }
-
-    console.log('');
-
-    if (i < batch.length - 1) {
-      await sleep(delayMs);
-    }
-  }
-
-  // 汇总
+  console.log('\n═══════════════════════════════════════');
+  console.log('📋 结果汇总');
   console.log('═══════════════════════════════════════');
-  console.log('📋 本次结果汇总');
-  console.log('═══════════════════════════════════════');
-  console.log(`✅ 成功匹配: ${success}`);
-  console.log(`❌ 未找到:   ${failed}`);
+  console.log(`✅ 成功: ${result.success}`);
+  console.log(`❌ 失败: ${result.failed}`);
 
-  if (failedTitles.length > 0) {
-    console.log(`\n未找到图片的菜谱（${failedTitles.length}道）:`);
-    failedTitles.forEach((t, i) => console.log(`  ${i + 1}. ${t}`));
-    console.log('\n💡 建议: 对这些菜谱使用 AI 生成（通义万相）或手动添加');
-  }
-
-  const remaining = noCover.length - limit;
-  if (remaining > 0) {
-    console.log(`\n⚠️  还有 ${remaining} 道无封面，可再次运行`);
-    console.log(`   node scripts/fill-recipe-covers.js --limit=${Math.min(50, remaining)}`);
-  } else {
-    console.log('\n🎉 全部处理完成！');
+  if (result.failedTitles.length > 0) {
+    console.log(`\n未找到图片的菜谱:`);
+    result.failedTitles.forEach((t, i) => console.log(`  ${i + 1}. ${t}`));
+    console.log('\n💡 建议: AI 生成或手动添加');
   }
 
   if (dryRun) {
-    console.log('\n⚠️  这是试运行模式，未写入数据库');
-    console.log('   确认效果后，去掉 --dry-run 参数正式运行');
+    console.log('\n⚠️  试运行模式，未写入数据库');
   }
 }
 
-main().catch(err => {
-  console.error('❌ 执行出错:', err.message);
-  process.exit(1);
-});
+// 导出函数供其他模块调用
+module.exports = { fillCoversForRecipes, findCoverImage };
+
+// 如果直接运行脚本
+if (require.main === module) {
+  main().catch(err => {
+    console.error('❌ 执行出错:', err.message);
+    process.exit(1);
+  });
+}
