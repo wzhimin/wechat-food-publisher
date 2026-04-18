@@ -9,12 +9,12 @@ router.get('/list', async (req, res) => {
   try {
     const openid = req.query.openid || '';
     const { date } = req.query;
-    const planDate = date || new Date().toISOString().slice(0, 10);
 
-    const where = { planDate };
+    const where = {};
+    if (date) where.planDate = date;
     if (openid) where.openid = openid;
 
-    const plans = await MealPlan.findAll({ where, order: [['created_at', 'ASC']] });
+    const plans = await MealPlan.findAll({ where, order: [['planDate', 'DESC'], ['created_at', 'ASC']] });
 
     const recipeIds = plans.map(p => p.recipeId).filter(Boolean);
     const recipes = recipeIds.length
