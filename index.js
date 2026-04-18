@@ -486,6 +486,24 @@ function scheduleReminders() {
   console.log('[定时器] 订阅消息推送已启动（午餐 11:00，晚餐 17:00）');
 }
 
+// ========== 管理员接口：批量更新菜谱封面 ==========
+// POST /api/admin/update-cover
+// Body: { id, cover }
+app.post('/api/admin/update-cover', async (req, res) => {
+  try {
+    const { id, cover } = req.body;
+    if (!id) return res.status(400).json({ error: '缺少 id' });
+    if (!cover) return res.status(400).json({ error: '缺少 cover' });
+    const recipe = await Recipe.findByPk(id);
+    if (!recipe) return res.status(404).json({ error: '菜谱不存在' });
+    await recipe.update({ cover });
+    res.json({ success: true, id, cover });
+  } catch (err) {
+    console.error('[/api/admin/update-cover]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== 注册小程序接口路由 ==========
 app.use('/api/user', userRouter);
 app.use('/api/todo', todoRouter);
