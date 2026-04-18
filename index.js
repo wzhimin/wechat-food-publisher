@@ -516,6 +516,7 @@ app.get('/api/recipe/recommend', async (req, res) => {
     const RecipeLike = require('./models/RecipeLike');
     const Collection = require('./models/Collection');
     const { Op } = require('sequelize');
+    const { sequelize } = require('./db');
 
     // 获取用户浏览/点赞/收藏的菜谱标签
     const [history, likes, collects] = await Promise.all([
@@ -527,12 +528,15 @@ app.get('/api/recipe/recommend', async (req, res) => {
     const recipeIds = [...new Set([
       ...history.map(h => h.recipeId),
       ...likes.map(l => l.recipeId),
-      ...collects.map(c => c.recipeId || c.recipe_id),
+      ...collects.map(c => c.recipeId),
     ])];
 
     if (recipeIds.length === 0) {
-      // 无历史 → 返回随机菜谱
-      const random = await Recipe.findAll({ order: sequelize.random(), limit: parseInt(limit) });
+      // 无历史 → 返回随机菜谱（使用 RAND() 函数）
+      const random = await Recipe.findAll({
+        order: [[sequelize.literal('RAND()'), 'ASC']],
+        limit: parseInt(limit)
+      });
       return res.json({ success: true, data: random, reason: 'random' });
     }
 
@@ -555,7 +559,10 @@ app.get('/api/recipe/recommend', async (req, res) => {
       .map(([tag]) => tag);
 
     if (topTags.length === 0) {
-      const random = await Recipe.findAll({ order: sequelize.random(), limit: parseInt(limit) });
+      const random = await Recipe.findAll({
+        order: [[sequelize.literal('RAND()'), 'ASC']],
+        limit: parseInt(limit)
+      });
       return res.json({ success: true, data: random, reason: 'random' });
     }
 
@@ -566,7 +573,7 @@ app.get('/api/recipe/recommend', async (req, res) => {
     };
     const recommended = await Recipe.findAll({
       where: whereClause,
-      order: sequelize.random(),
+      order: [[sequelize.literal('RAND()'), 'ASC']],
       limit: parseInt(limit) + 5, // 多取一些备用
     });
 
