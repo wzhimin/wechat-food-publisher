@@ -270,13 +270,13 @@ router.post('/add', async (req, res) => {
       authorOpenid: openid,
       likeCount: 0,
       commentCount: 0,
-      status: 'pending',  // 用户发布的菜谱默认待审核
+      status: 'approved',  // 自动审核通过
     });
 
     res.json({ 
       success: true, 
       data: recipe,
-      message: '菜谱已提交，等待审核通过后将展示',
+      message: '发布成功',
     });
   } catch (err) {
     console.error('[/api/recipe/add]', err.message);

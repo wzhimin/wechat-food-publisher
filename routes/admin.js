@@ -498,7 +498,7 @@ router.get('/users/list', checkAuth, async (req, res) => {
   try {
     const { page = 1, pageSize = 50 } = req.query;
     
-    const users = await User.findAll({
+    const { count, rows: users } = await User.findAndCountAll({
       attributes: ['openid', 'nickName', 'avatarUrl', 'created_at', 'last_login'],
       order: [['created_at', 'DESC']],
       limit: parseInt(pageSize),
@@ -508,30 +508,34 @@ router.get('/users/list', checkAuth, async (req, res) => {
     // 统计每个用户的数据
     const openids = users.map(u => u.openid).filter(Boolean);
     
-    const [recipeCounts, collectCounts, likeCounts, noteCounts] = await Promise.all([
-      dbSeq.query(
-        'SELECT openid, COUNT(*) as count FROM recipes WHERE openid IN (?) GROUP BY openid',
-        { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
-      ),
-      dbSeq.query(
-        'SELECT openid, COUNT(*) as count FROM collections WHERE openid IN (?) GROUP BY openid',
-        { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
-      ),
-      dbSeq.query(
-        'SELECT openid, COUNT(*) as count FROM recipe_likes WHERE openid IN (?) GROUP BY openid',
-        { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
-      ),
-      dbSeq.query(
-        'SELECT openid, COUNT(*) as count FROM recipe_notes WHERE openid IN (?) GROUP BY openid',
-        { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
-      ),
-    ]);
+    let recipeMap = {}, collectMap = {}, likeMap = {}, noteMap = {};
     
-    const toMap = (arr) => Object.fromEntries(arr.map(x => [x.openid, x.count]));
-    const recipeMap = toMap(recipeCounts);
-    const collectMap = toMap(collectCounts);
-    const likeMap = toMap(likeCounts);
-    const noteMap = toMap(noteCounts);
+    if (openids.length > 0) {
+      const [recipeCounts, collectCounts, likeCounts, noteCounts] = await Promise.all([
+        dbSeq.query(
+          'SELECT openid, COUNT(*) as count FROM recipes WHERE openid IN (?) GROUP BY openid',
+          { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
+        ),
+        dbSeq.query(
+          'SELECT openid, COUNT(*) as count FROM collections WHERE openid IN (?) GROUP BY openid',
+          { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
+        ),
+        dbSeq.query(
+          'SELECT openid, COUNT(*) as count FROM recipe_likes WHERE openid IN (?) GROUP BY openid',
+          { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
+        ),
+        dbSeq.query(
+          'SELECT openid, COUNT(*) as count FROM recipe_notes WHERE openid IN (?) GROUP BY openid',
+          { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
+        ),
+      ]);
+      
+      const toMap = (arr) => Object.fromEntries(arr.map(x => [x.openid, x.count]));
+      recipeMap = toMap(recipeCounts);
+      collectMap = toMap(collectCounts);
+      likeMap = toMap(likeCounts);
+      noteMap = toMap(noteCounts);
+    }
     
     const data = users.map(u => ({
       ...u.toJSON(),
@@ -541,9 +545,120 @@ router.get('/users/list', checkAuth, async (req, res) => {
       noteCount: noteMap[u.openid] || 0,
     }));
     
-    res.json({ success: true, data });
+    res.json({ success: true, data, total: count });
   } catch (err) {
     console.error('[/api/admin/users/list]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== 非菜谱清理 ==========
+
+// 非菜谱关键词（纯食材、小贴士、文章等）
+const NON_RECIPE_KEYWORDS = [
+  '小贴士', '贴士', '技巧', '方法', '指南', '攻略', '大全', '百科',
+  '香椿', '春笋', '韭菜', '菠菜', '芹菜', '荠菜', '芦笋', '莴笋',
+  '功效', '作用', '好处', '营养', '价值', '禁忌', '注意',
+  '祛湿', '养生', '保健', '食疗', '偏方',
+];
+
+// GET /api/admin/recipes/non-dishes
+// 列出可能是非菜谱的内容
+router.get('/recipes/non-dishes', checkAuth, async (req, res) => {
+  try {
+    const { page = 1, pageSize = 50 } = req.query;
+    
+    // 构建查询条件
+    const orConditions = NON_RECIPE_KEYWORDS.map(kw => ({
+      title: { [Op.like]: `%${kw}%` }
+    }));
+    
+    const where = {
+      [Op.or]: orConditions,
+    };
+    
+    const offset = (parseInt(page) - 1) * parseInt(pageSize);
+    const { count, rows: recipes } = await Recipe.findAndCountAll({
+      where,
+      attributes: ['id', 'title', 'cover', 'ingredients', 'steps', 'created_at'],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(pageSize),
+      offset,
+    });
+    
+    // 分析每条记录
+    const data = recipes.map(r => {
+      const reasons = [];
+      const title = r.title || '';
+      
+      // 检查关键词
+      for (const kw of NON_RECIPE_KEYWORDS) {
+        if (title.includes(kw)) {
+          reasons.push(`标题含"${kw}"`);
+        }
+      }
+      
+      // 检查是否有步骤
+      let steps = [];
+      try {
+        steps = JSON.parse(r.steps || '[]');
+      } catch (e) {}
+      if (!steps.length) {
+        reasons.push('无步骤');
+      }
+      
+      // 检查是否有食材
+      let ingredients = [];
+      try {
+        ingredients = JSON.parse(r.ingredients || '[]');
+      } catch (e) {}
+      if (!ingredients.length) {
+        reasons.push('无食材');
+      }
+      
+      return {
+        id: r.id,
+        title: r.title,
+        cover: r.cover,
+        hasSteps: steps.length > 0,
+        hasIngredients: ingredients.length > 0,
+        stepsCount: steps.length,
+        ingredientsCount: ingredients.length,
+        reasons,
+        created_at: r.created_at,
+      };
+    });
+    
+    res.json({ success: true, data, total: count, keywords: NON_RECIPE_KEYWORDS });
+  } catch (err) {
+    console.error('[/api/admin/recipes/non-dishes]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/recipes/batch-delete
+// 批量删除菜谱
+router.post('/recipes/batch-delete', checkAuth, async (req, res) => {
+  try {
+    const { token, recipeIds } = req.body;
+    if (!Array.isArray(recipeIds) || recipeIds.length === 0) {
+      return res.status(400).json({ error: '请选择要删除的菜谱' });
+    }
+    
+    // 先删除关联数据
+    await Collection.destroy({ where: { recipe_id: recipeIds } });
+    await RecipeLike.destroy({ where: { recipe_id: recipeIds } });
+    await RecipeComment.destroy({ where: { recipe_id: recipeIds } });
+    await RecipeNote.destroy({ where: { recipe_id: recipeIds } });
+    await BrowseHistory.destroy({ where: { recipe_id: recipeIds } });
+    await MealPlan.destroy({ where: { recipe_id: recipeIds } });
+    
+    // 删除菜谱
+    const deleted = await Recipe.destroy({ where: { id: recipeIds } });
+    
+    res.json({ success: true, deleted, message: `成功删除 ${deleted} 条菜谱` });
+  } catch (err) {
+    console.error('[/api/admin/recipes/batch-delete]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
