@@ -39,7 +39,31 @@ async function init() {
     }
   } catch (e) { console.error('[清理] 索引失败:', e.message); }
 
-  // 第二步：迁移 feedback → feedbacks（历史命名错误）
+  // 第二步：修复 users 表（历史问题：缺 updated_at，可能有 openId 大写列）
+  try {
+    const [userCols] = await sequelize.query(`SHOW COLUMNS FROM users`);
+    const colNames = userCols.map(c => c.Field);
+
+    // 补 updated_at 列（Sequelize timestamps 依赖此列）
+    if (!colNames.includes('updated_at')) {
+      const hasCreatedAt = colNames.includes('created_at');
+      if (hasCreatedAt) {
+        await sequelize.query(`ALTER TABLE users ADD COLUMN updated_at DATETIME DEFAULT NULL`);
+        console.log('[修复] users.updated_at 已补充');
+      } else {
+        await sequelize.query(`ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT NULL, ADD COLUMN updated_at DATETIME DEFAULT NULL`);
+        console.log('[修复] users.created_at + updated_at 已补充');
+      }
+    }
+
+    // 统一列名：openId → openid（历史遗留大小写不一致）
+    if (colNames.includes('openId')) {
+      await sequelize.query(`ALTER TABLE users CHANGE COLUMN openId openid VARCHAR(64) NOT NULL`);
+      console.log('[迁移] users.openId → openid');
+    }
+  } catch (e) { console.error('[修复] users 表出错:', e.message); }
+
+  // 第三步：迁移 feedback → feedbacks（历史命名错误）
   // 如果旧 feedback 表存在，rename 为 feedbacks；不存在则直接创建 feedbacks 表
   try {
     const [oldRows] = await sequelize.query(`SHOW TABLES LIKE 'feedback'`);
@@ -48,7 +72,6 @@ async function init() {
       await sequelize.query('RENAME TABLE feedback TO feedbacks');
       console.log('[迁移] feedback → feedbacks 完成');
     } else if (newRows.length === 0) {
-      // feedbacks 表从未存在，直接用 SQL 创建
       await sequelize.query(`
         CREATE TABLE feedbacks (
           id INT AUTO_INCREMENT PRIMARY KEY,
