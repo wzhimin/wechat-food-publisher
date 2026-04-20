@@ -1,8 +1,63 @@
 const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
+const axios = require('axios');
 const Recipe = require('../models/Recipe');
 const User = require('../models/User');
+
+// ========== 微信内容安全审核 ==========
+const MINI_APP_ID = process.env.MINI_APP_ID || '';
+const MINI_APP_SECRET = process.env.MINI_APP_SECRET || '';
+let _tokenCache = null;
+let _tokenExpire = 0;
+
+async function getAccessToken() {
+  if (_tokenCache && Date.now() < _tokenExpire) return _tokenCache;
+  const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${MINI_APP_ID}&secret=${MINI_APP_SECRET}`;
+  const r = await axios.get(url).catch(() => null);
+  if (r && r.data && r.data.access_token) {
+    _tokenCache = r.data.access_token;
+    _tokenExpire = Date.now() + ((r.data.expires_in || 7200) - 300) * 1000;
+    return _tokenCache;
+  }
+  return null;
+}
+
+async function checkTextContent(content) {
+  if (!content || !content.trim()) return { passed: true };
+  try {
+    const token = await getAccessToken();
+    if (!token) return { passed: true, reason: '未配置微信小程序凭证' };
+    const url = `https://api.weixin.qq.com/wxa/msg_sec_check?access_token=${token}`;
+    const r = await axios.post(url, { content: content.trim() }).catch(() => null);
+    if (r && r.data && r.data.errcode !== 0) {
+      console.warn('[内容审核] 文本未通过', r.data);
+      return { passed: false, reason: '内容包含敏感信息' };
+    }
+    return { passed: true };
+  } catch (e) {
+    console.warn('[内容审核] msgSecCheck 调用失败', e.message);
+    return { passed: true }; // 审核服务异常时放行
+  }
+}
+
+// 检查菜谱内容（标题+食材+步骤+小贴士）
+async function checkRecipeContent(recipe) {
+  const texts = [
+    recipe.title,
+    recipe.tips,
+    Array.isArray(recipe.ingredients) ? recipe.ingredients.join(' ') : recipe.ingredients,
+    Array.isArray(recipe.steps) ? recipe.steps.join(' ') : recipe.steps,
+  ].filter(Boolean);
+  
+  for (const text of texts) {
+    const result = await checkTextContent(text);
+    if (!result.passed) {
+      return result;
+    }
+  }
+  return { passed: true };
+}
 
 // GET /api/recipe/list
 // 查询菜谱列表，支持搜索、分类、时令筛选、排序
@@ -178,6 +233,12 @@ router.post('/add', async (req, res) => {
     if (!openid) return res.status(400).json({ error: '缺少 openid' });
     if (!title || !title.trim()) return res.status(400).json({ error: '请输入菜谱名称' });
 
+    // ========== 内容安全审核 ==========
+    const checkResult = await checkRecipeContent({ title, ingredients, steps, tips });
+    if (!checkResult.passed) {
+      return res.status(403).json({ error: '菜谱内容未通过安全审核，请修改后重试' });
+    }
+
     // 检查用户存在
     let user = await User.findOne({ where: { openid } });
     if (!user) {
@@ -197,9 +258,14 @@ router.post('/add', async (req, res) => {
       authorOpenid: openid,
       likeCount: 0,
       commentCount: 0,
+      status: 'pending',  // 用户发布的菜谱默认待审核
     });
 
-    res.json({ success: true, data: recipe });
+    res.json({ 
+      success: true, 
+      data: recipe,
+      message: '菜谱已提交，等待审核通过后将展示',
+    });
   } catch (err) {
     console.error('[/api/recipe/add]', err.message);
     res.status(500).json({ error: err.message });

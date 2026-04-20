@@ -53,6 +53,18 @@
     .page-header { margin-bottom: 20px; }
     .page-header h1 { font-size: 24px; margin-bottom: 8px; }
     
+    .stats-row {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+    .stats-row span { color: #666; }
+    .stats-row strong { color: #2c3e50; font-size: 18px; }
+    
     .filter-bar {
       background: white;
       padding: 16px;
@@ -79,9 +91,10 @@
       overflow: hidden;
       box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
-    table { width: 100%; border-collapse: collapse; }
+    .table-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; }
     th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #eee; }
-    th { background: #f8f9fa; font-weight: 500; }
+    th { background: #f8f9fa; font-weight: 500; white-space: nowrap; }
     .recipe-title { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .recipe-cover { 
       width: 60px; 
@@ -120,6 +133,31 @@
     
     .empty { text-align: center; padding: 40px; color: #999; }
     .loading { text-align: center; padding: 40px; }
+    
+    /* 分页 */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      padding: 20px;
+      background: white;
+      border-top: 1px solid #eee;
+    }
+    .pagination button, .pagination span {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .pagination button:hover { background: #f5f5f5; }
+    .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .pagination .current {
+      background: #3498db;
+      color: white;
+      border-color: #3498db;
+    }
     
     /* 编辑弹窗 */
     .modal {
@@ -195,41 +233,48 @@
       <h1>📖 菜谱管理</h1>
     </div>
     
+    <div class="stats-row" id="statsRow">
+      加载中...
+    </div>
+    
     <div class="filter-bar">
       <label>状态：</label>
-      <select id="statusFilter" onchange="loadRecipes()">
+      <select id="statusFilter" onchange="changeFilter()">
         <option value="approved">已发布</option>
         <option value="pending">待审核</option>
         <option value="rejected">已拒绝</option>
         <option value="all">全部</option>
       </select>
       <label>精选：</label>
-      <select id="featuredFilter" onchange="loadRecipes()">
+      <select id="featuredFilter" onchange="changeFilter()">
         <option value="all">全部</option>
         <option value="1">已精选</option>
         <option value="0">未精选</option>
       </select>
-      <input type="text" id="searchInput" class="search-box" placeholder="搜索菜谱标题..." onkeyup="if(event.key==='Enter')loadRecipes()">
-      <button class="btn btn-primary" onclick="loadRecipes()">搜索</button>
+      <input type="text" id="searchInput" class="search-box" placeholder="搜索菜谱标题..." onkeyup="if(event.key==='Enter'){currentPage=1;loadRecipes()}">
+      <button class="btn btn-primary" onclick="currentPage=1;loadRecipes()">搜索</button>
     </div>
     
     <div class="recipe-table">
-      <table>
-        <thead>
-          <tr>
-            <th>封面</th>
-            <th>标题</th>
-            <th>作者</th>
-            <th>状态</th>
-            <th>收藏/点赞</th>
-            <th>发布时间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="recipeList">
-          <tr><td colspan="7" class="loading">加载中...</td></tr>
-        </tbody>
-      </table>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>封面</th>
+              <th>标题</th>
+              <th>作者</th>
+              <th>状态</th>
+              <th>收藏/点赞</th>
+              <th>发布时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="recipeList">
+            <tr><td colspan="7" class="loading">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination" id="pagination"></div>
     </div>
   </div>
 
@@ -294,12 +339,13 @@
     const API_BASE = window.location.origin + '/api';
     let token = localStorage.getItem('admin_token') || '';
     let allRecipes = [];
+    let currentPage = 1;
+    let pageSize = 15;
+    let totalCount = 0;
     
     if (!token) {
       location.href = 'index.html';
     }
-    
-    loadRecipes();
     
     // 封面预览
     document.getElementById('editCover').addEventListener('input', function() {
@@ -313,6 +359,13 @@
       }
     });
     
+    loadRecipes();
+    
+    function changeFilter() {
+      currentPage = 1;
+      loadRecipes();
+    }
+    
     async function loadRecipes() {
       const status = document.getElementById('statusFilter').value;
       const featured = document.getElementById('featuredFilter').value;
@@ -321,8 +374,9 @@
       listEl.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
       
       try {
-        let url = `${API_BASE}/admin/recipes/list?token=${token}&status=${status}`;
+        let url = `${API_BASE}/admin/recipes/list?token=${token}&status=${status}&page=${currentPage}&pageSize=${pageSize}`;
         if (featured !== 'all') url += `&isFeatured=${featured}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
         
         const res = await fetch(url);
         if (res.status === 401) {
@@ -332,19 +386,22 @@
         }
         const data = await res.json();
         allRecipes = data.data || [];
+        totalCount = data.total || 0;
         
-        // 前端搜索过滤
-        let filtered = allRecipes;
-        if (search) {
-          filtered = allRecipes.filter(r => r.title && r.title.includes(search));
-        }
+        // 更新统计
+        const totalPages = Math.ceil(totalCount / pageSize);
+        document.getElementById('statsRow').innerHTML = `
+          <span>共 <strong>${totalCount}</strong> 条菜谱</span>
+          <span>第 <strong>${currentPage}</strong> / <strong>${totalPages || 1}</strong> 页</span>
+        `;
         
-        if (!filtered.length) {
+        if (!allRecipes.length) {
           listEl.innerHTML = '<tr><td colspan="7" class="empty">暂无菜谱</td></tr>';
+          renderPagination();
           return;
         }
         
-        listEl.innerHTML = filtered.map(r => `
+        listEl.innerHTML = allRecipes.map(r => `
           <tr>
             <td><img class="recipe-cover" src="${getCoverUrl(r.cover)}" alt="" onerror="this.src='https://via.placeholder.com/60?text=No'"></td>
             <td class="recipe-title" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</td>
@@ -370,16 +427,59 @@
             </td>
           </tr>
         `).join('');
+        
+        renderPagination();
       } catch (e) {
         console.error(e);
         listEl.innerHTML = '<tr><td colspan="7" class="empty">网络错误</td></tr>';
       }
     }
     
+    function renderPagination() {
+      const totalPages = Math.ceil(totalCount / pageSize);
+      const el = document.getElementById('pagination');
+      
+      if (totalPages <= 1) {
+        el.innerHTML = '';
+        return;
+      }
+      
+      let html = '';
+      html += `<button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>`;
+      
+      // 显示页码
+      const start = Math.max(1, currentPage - 2);
+      const end = Math.min(totalPages, currentPage + 2);
+      
+      if (start > 1) {
+        html += `<button onclick="goToPage(1)">1</button>`;
+        if (start > 2) html += `<span>...</span>`;
+      }
+      
+      for (let i = start; i <= end; i++) {
+        html += `<button onclick="goToPage(${i})" class="${i === currentPage ? 'current' : ''}">${i}</button>`;
+      }
+      
+      if (end < totalPages) {
+        if (end < totalPages - 1) html += `<span>...</span>`;
+        html += `<button onclick="goToPage(${totalPages})">${totalPages}</button>`;
+      }
+      
+      html += `<button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>`;
+      
+      el.innerHTML = html;
+    }
+    
+    function goToPage(page) {
+      const totalPages = Math.ceil(totalCount / pageSize);
+      if (page < 1 || page > totalPages) return;
+      currentPage = page;
+      loadRecipes();
+    }
+    
     function getCoverUrl(cover) {
       if (!cover) return 'https://via.placeholder.com/60?text=No';
       if (cover.startsWith('http')) return cover;
-      // 如果是相对路径，添加域名前缀
       return cover;
     }
     
@@ -446,7 +546,6 @@
       document.getElementById('editTags').value = r.tags || '';
       document.getElementById('editTips').value = r.tips || '';
       
-      // 显示封面预览
       const preview = document.getElementById('editCoverPreview');
       if (r.cover) {
         preview.src = r.cover;

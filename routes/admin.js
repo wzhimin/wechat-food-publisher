@@ -216,29 +216,43 @@ router.post('/comments/reject', checkAuth, async (req, res) => {
 // GET /api/admin/recipes/list
 router.get('/recipes/list', checkAuth, async (req, res) => {
   try {
-    const { status = 'approved', isFeatured, page = 1, pageSize = 50 } = req.query;
+    const { status = 'approved', isFeatured, search, page = 1, pageSize = 20 } = req.query;
     const where = {};
     if (status !== 'all') where.status = status;
     if (isFeatured !== undefined) where.is_featured = isFeatured === '1' || isFeatured === 'true';
+    if (search && search.trim()) {
+      where[Op.or] = [
+        { title: { [Op.like]: `%${search.trim()}%` } },
+      ];
+    }
     
-    const recipes = await Recipe.findAll({
+    const offset = (parseInt(page) - 1) * parseInt(pageSize);
+    const { count, rows: recipes } = await Recipe.findAndCountAll({
       where,
       order: [['created_at', 'DESC']],
       limit: parseInt(pageSize),
-      offset: (parseInt(page) - 1) * parseInt(pageSize),
+      offset,
     });
     
     // 获取用户信息
-    const openids = [...new Set(recipes.map(r => r.openid))];
-    const users = await User.findAll({ where: { openid: openids }, attributes: ['openid', 'nickName'] });
-    const userMap = Object.fromEntries(users.map(u => [u.openid, u]));
+    const openids = [...new Set(recipes.map(r => r.openid).filter(Boolean))];
+    const users = openids.length 
+      ? await User.findAll({ where: { openid: openids }, attributes: ['openid', 'nickName'] })
+      : [];
+    const userMap = Object.fromEntries(users.map(u => [u.openid, u.nickName]));
     
     const data = recipes.map(r => ({
       ...r.toJSON(),
-      nickName: userMap[r.openid]?.nickName,
+      nickName: userMap[r.openid] || '系统',
     }));
     
-    res.json({ success: true, data });
+    res.json({ 
+      success: true, 
+      data,
+      total: count,
+      page: parseInt(page),
+      pageSize: parseInt(pageSize),
+    });
   } catch (err) {
     console.error('[/api/admin/recipes/list]', err.message);
     res.status(500).json({ error: err.message });
