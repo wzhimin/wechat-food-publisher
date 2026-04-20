@@ -16,6 +16,7 @@ const RecipeLike = require('../models/RecipeLike');
 const Collection = require('../models/Collection');
 const BrowseHistory = require('../models/BrowseHistory');
 const MealPlan = require('../models/MealPlan');
+const Report = require('../models/Report');
 
 // ========== 管理员账号配置 ==========
 // 生产环境应从数据库读取，这里简化处理
@@ -632,6 +633,133 @@ router.post('/recipes/batch-delete', checkAuth, async (req, res) => {
     res.json({ success: true, deleted, message: `成功删除 ${deleted} 条菜谱` });
   } catch (err) {
     console.error('[/api/admin/recipes/batch-delete]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== 举报管理 ==========
+
+// GET /api/admin/reports/list
+router.get('/reports/list', checkAuth, async (req, res) => {
+  try {
+    const { status = 'pending', page = 1, pageSize = 50 } = req.query;
+    
+    const where = {};
+    if (status !== 'all') {
+      where.status = status;
+    }
+    
+    const { count, rows } = await Report.findAndCountAll({
+      where,
+      order: [['created_at', 'DESC']],
+      limit: parseInt(pageSize),
+      offset: (parseInt(page) - 1) * parseInt(pageSize),
+    });
+    
+    // 获取举报目标详情
+    const reports = await Promise.all(rows.map(async (r) => {
+      let target = null;
+      if (r.type === 'recipe') {
+        target = await Recipe.findByPk(r.target_id, {
+          attributes: ['id', 'title', 'cover', 'openid'],
+        });
+      } else if (r.type === 'comment') {
+        target = await RecipeComment.findByPk(r.target_id, {
+          attributes: ['id', 'content', 'openid', 'recipe_id'],
+        });
+        if (target) {
+          const recipe = await Recipe.findByPk(target.recipe_id, {
+            attributes: ['id', 'title'],
+          });
+          target = { ...target.toJSON(), recipe };
+        }
+      }
+      
+      // 获取举报用户昵称
+      const user = await User.findOne({
+        where: { openid: r.openid },
+        attributes: ['nickName', 'avatarUrl'],
+      });
+      
+      return {
+        ...r.toJSON(),
+        target,
+        reporter: user,
+      };
+    }));
+    
+    res.json({ success: true, data: reports, total: count });
+  } catch (err) {
+    console.error('[/api/admin/reports/list]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/reports/resolve
+router.post('/reports/resolve', checkAuth, async (req, res) => {
+  try {
+    const { reportId, action, result } = req.body;
+    // action: 'approve'(通过举报，删除内容) / 'reject'(驳回举报)
+    
+    const report = await Report.findByPk(reportId);
+    if (!report) {
+      return res.status(404).json({ error: '举报不存在' });
+    }
+    
+    if (action === 'approve') {
+      // 通过举报，删除目标内容
+      if (report.type === 'recipe') {
+        // 删除菜谱及关联数据
+        await Collection.destroy({ where: { recipeId: report.target_id } });
+        await RecipeLike.destroy({ where: { recipeId: report.target_id } });
+        await RecipeComment.destroy({ where: { recipeId: report.target_id } });
+        await BrowseHistory.destroy({ where: { recipeId: report.target_id } });
+        await MealPlan.destroy({ where: { recipeId: report.target_id } });
+        await Recipe.destroy({ where: { id: report.target_id } });
+      } else if (report.type === 'comment') {
+        // 删除评论
+        const comment = await RecipeComment.findByPk(report.target_id);
+        if (comment) {
+          await Recipe.decrement({ commentCount: 1 }, { where: { id: comment.recipe_id } });
+          await comment.destroy();
+        }
+      }
+      
+      report.status = 'resolved';
+      report.result = result || '内容已删除';
+    } else {
+      // 驳回举报
+      report.status = 'rejected';
+      report.result = result || '举报不成立';
+    }
+    
+    report.handled_by = req.adminUser.username;
+    report.handled_at = new Date();
+    await report.save();
+    
+    res.json({ success: true, message: '处理完成' });
+  } catch (err) {
+    console.error('[/api/admin/reports/resolve]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/reports/stats
+router.get('/reports/stats', checkAuth, async (req, res) => {
+  try {
+    const [total, pending, resolved, rejected] = await Promise.all([
+      Report.count(),
+      Report.count({ where: { status: 'pending' } }),
+      Report.count({ where: { status: 'resolved' } }),
+      Report.count({ where: { status: 'rejected' } }),
+    ]);
+    
+    res.json({
+      success: true,
+      data: { total, pending, resolved, rejected },
+    });
+  } catch (err) {
+    console.error('[/api/admin/reports/stats]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

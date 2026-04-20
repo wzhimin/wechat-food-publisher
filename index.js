@@ -34,6 +34,7 @@ const noteRouter = require('./routes/note');
 const likeRouter = require('./routes/like');
 const commentRouter = require('./routes/comment');
 const followRouter = require('./routes/follow');
+const reportRouter = require('./routes/report');
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));
@@ -663,6 +664,7 @@ app.use('/api/note', noteRouter);
 app.use('/api/like', likeRouter);
 app.use('/api/comment', commentRouter);
 app.use('/api/follow', followRouter);
+app.use('/api/report', reportRouter);
 
 const port = process.env.PORT || 80;
 

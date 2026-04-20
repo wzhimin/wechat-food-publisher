@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>举报管理 - 后台管理</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f5f5f5; }
+    .sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 220px;
+      height: 100vh;
+      background: #2c3e50;
+      padding-top: 20px;
+    }
+    .sidebar a {
+      display: block;
+      color: #ecf0f1;
+      padding: 12px 20px;
+      text-decoration: none;
+      border-left: 3px solid transparent;
+    }
+    .sidebar a:hover, .sidebar a.active {
+      background: #34495e;
+      border-left-color: #3498db;
+    }
+    .main { margin-left: 240px; padding: 20px; }
+    .stat-card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    .stat-card h3 { margin: 0; font-size: 28px; color: #3498db; }
+    .stat-card p { margin: 5px 0 0; color: #7f8c8d; }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <a href="index.html">首页</a>
+    <a href="recipes.html">菜谱管理</a>
+    <a href="comments.html">评论管理</a>
+    <a href="feedbacks.html">用户反馈</a>
+    <a href="reports.html" class="active">举报管理</a>
+    <a href="users.html">用户管理</a>
+    <a href="non-dishes.html">非菜谱清理</a>
+    <a href="#" onclick="logout()">退出登录</a>
+  </div>
+
+  <div class="main">
+    <h2>举报管理</h2>
+
+    <!-- 统计卡片 -->
+    <div class="row">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <h3 id="stat-pending">0</h3>
+          <p>待处理</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <h3 id="stat-resolved">0</h3>
+          <p>已处理</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <h3 id="stat-rejected">0</h3>
+          <p>已驳回</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <h3 id="stat-total">0</h3>
+          <p>总计</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 筛选 -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <select id="filter-status" class="form-select" style="width: auto;">
+          <option value="pending">待处理</option>
+          <option value="resolved">已处理</option>
+          <option value="rejected">已驳回</option>
+          <option value="all">全部</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 列表 -->
+    <div class="card">
+      <div class="card-body">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>类型</th>
+              <th>举报内容</th>
+              <th>举报原因</th>
+              <th>举报人</th>
+              <th>时间</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="report-list"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 分页 -->
+    <nav id="pagination" class="mt-3"></nav>
+  </div>
+
+  <!-- 处理弹窗 -->
+  <div class="modal fade" id="handleModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">处理举报</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="handle-detail"></div>
+          <hr>
+          <div class="mb-3">
+            <label class="form-label">处理结果说明</label>
+            <textarea id="handle-result" class="form-control" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-danger" onclick="handleReport('approve')">通过举报（删除内容）</button>
+          <button type="button" class="btn btn-secondary" onclick="handleReport('reject')">驳回举报</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const API_BASE = '/api/admin';
+    let token = localStorage.getItem('admin_token');
+    let currentPage = 1;
+    let currentReportId = null;
+
+    // 检查登录
+    if (!token) {
+      location.href = 'index.html';
+    }
+
+    // 加载统计
+    async function loadStats() {
+      const res = await fetch(`${API_BASE}/reports/stats?token=${token}`);
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('stat-pending').textContent = data.data.pending;
+        document.getElementById('stat-resolved').textContent = data.data.resolved;
+        document.getElementById('stat-rejected').textContent = data.data.rejected;
+        document.getElementById('stat-total').textContent = data.data.total;
+      }
+    }
+
+    // 加载列表
+    async function loadList() {
+      const status = document.getElementById('filter-status').value;
+      const res = await fetch(`${API_BASE}/reports/list?token=${token}&status=${status}&page=${currentPage}`);
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error);
+        return;
+      }
+
+      const tbody = document.getElementById('report-list');
+      tbody.innerHTML = data.data.map(r => {
+        const typeLabel = r.type === 'recipe' ? '菜谱' : '评论';
+        const statusLabel = {
+          pending: '<span class="badge bg-warning">待处理</span>',
+          resolved: '<span class="badge bg-success">已处理</span>',
+          rejected: '<span class="badge bg-secondary">已驳回</span>',
+        }[r.status];
+
+        let targetInfo = '';
+        if (r.target) {
+          if (r.type === 'recipe') {
+            targetInfo = `<div>菜谱：${r.target.title || '已删除'}</div>`;
+            if (r.target.cover) {
+              targetInfo += `<img src="${r.target.cover}" style="max-width:100px;max-height:60px;border-radius:4px;">`;
+            }
+          } else {
+            targetInfo = `<div>评论：${r.target.content?.substring(0, 50) || '已删除'}...</div>`;
+            if (r.target.recipe) {
+              targetInfo += `<div class="text-muted">所属菜谱：${r.target.recipe.title}</div>`;
+            }
+          }
+        }
+
+        const reporterName = r.reporter?.nickName || '未知用户';
+
+        let actions = '';
+        if (r.status === 'pending') {
+          actions = `<button class="btn btn-sm btn-primary" onclick="showHandleModal(${r.id}, '${r.type}')">处理</button>`;
+        } else {
+          actions = `<span class="text-muted">${r.handled_by} 处理</span>`;
+        }
+
+        return `
+          <tr>
+            <td>${r.id}</td>
+            <td>${typeLabel}</td>
+            <td>${targetInfo}</td>
+            <td>${r.reason}<br><small class="text-muted">${r.detail || ''}</small></td>
+            <td>${reporterName}</td>
+            <td>${new Date(r.created_at).toLocaleString()}</td>
+            <td>${statusLabel}</td>
+            <td>${actions}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // 显示处理弹窗
+    function showHandleModal(reportId, type) {
+      currentReportId = reportId;
+      document.getElementById('handle-result').value = '';
+      new bootstrap.Modal(document.getElementById('handleModal')).show();
+    }
+
+    // 处理举报
+    async function handleReport(action) {
+      const result = document.getElementById('handle-result').value;
+      const res = await fetch(`${API_BASE}/reports/resolve?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportId: currentReportId,
+          action,
+          result,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        bootstrap.Modal.getInstance(document.getElementById('handleModal')).hide();
+        loadStats();
+        loadList();
+      } else {
+        alert(data.error);
+      }
+    }
+
+    // 筛选变化
+    document.getElementById('filter-status').addEventListener('change', () => {
+      currentPage = 1;
+      loadList();
+    });
+
+    // 退出登录
+    function logout() {
+      localStorage.removeItem('admin_token');
+      location.href = 'index.html';
+    }
+
+    // 初始化
+    loadStats();
+    loadList();
+  </script>
+</body>
+</html>
