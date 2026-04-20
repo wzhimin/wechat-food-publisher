@@ -688,18 +688,18 @@ const port = process.env.PORT || 80;
 // ========== 启动 ==========
 init()
   .then(async () => {
-    // 旧模型同步
-    await User.sync({ alter: 'safe' });
-    await Todo.sync({ alter: 'safe' });
-    await Recipe.sync({ alter: 'safe' });
-    await Collection.sync({ alter: 'safe' });
-    await MealPlan.sync({ alter: 'safe' });
-    await BrowseHistory.sync({ alter: 'safe' });
-    await Feedback.sync({ alter: 'safe' });
-    await RecipeNote.sync({ alter: 'safe' });
-    await RecipeLike.sync({ alter: 'safe' });
-    await RecipeComment.sync({ alter: 'safe' });
-    await UserFollow.sync({ alter: 'safe' });
+    // 旧模型同步（alter: true 确保表不存在则创建，已存在则同步结构）
+    await User.sync({ alter: true });
+    await Todo.sync({ alter: true });
+    await Recipe.sync({ alter: true });
+    await Collection.sync({ alter: true });
+    await MealPlan.sync({ alter: true });
+    await BrowseHistory.sync({ alter: true });
+    await Feedback.sync({ alter: true });
+    await RecipeNote.sync({ alter: true });
+    await RecipeLike.sync({ alter: true });
+    await RecipeComment.sync({ alter: true });
+    await UserFollow.sync({ alter: true });
     // Report 是新模型，用 force:false 确保表不存在时创建
     await Report.sync({ force: false });
 
@@ -707,12 +707,17 @@ init()
     const tablesToCheck = ['users', 'recipes', 'collections', 'recipe_likes', 'recipe_notes', 'recipe_comments', 'feedbacks'];
     for (const table of tablesToCheck) {
       try {
+        // 先确认表存在
+        const [tableExists] = await sequelize.query(`SHOW TABLES LIKE '${table}'`);
+        if (tableExists.length === 0) continue;
         const [cols] = await sequelize.query(`SHOW COLUMNS FROM ${table} LIKE 'openId'`);
         if (cols.length > 0) {
           await sequelize.query(`ALTER TABLE ${table} CHANGE COLUMN openId openid VARCHAR(64) NOT NULL`);
           console.log(`[迁移] ${table}.openId → openid`);
         }
-      } catch (e) { /* 表不存在或无权限，忽略 */ }
+      } catch (e) {
+        console.error(`[迁移] ${table} 出错:`, e.message);
+      }
     }
 
     console.log('数据库初始化完成');
