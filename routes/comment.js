@@ -114,11 +114,11 @@ router.post('/add', async (req, res) => {
       recipeId,
       content: content.trim(),
       replyTo: replyTo || null,
-      status: 'pending',  // 新评论默认为待审核
+      status: 'approved',  // 自动审核通过
     });
 
-    // 评论数先不增加，等审核通过后再增加
-    // await Recipe.increment('commentCount', { by: 1, where: { id: recipeId } });
+    // 评论数增加
+    await Recipe.increment('commentCount', { by: 1, where: { id: recipeId } });
 
     const user = await User.findOne({ where: { openid }, attributes: ['openid', 'nickName', 'avatarUrl'] });
 
@@ -134,6 +134,7 @@ router.post('/add', async (req, res) => {
         createdAt: comment.created_at,
         replies: [],
       },
+      message: '评论成功',
     });
   } catch (err) {
     console.error('[/api/comment/add]', err.message);
