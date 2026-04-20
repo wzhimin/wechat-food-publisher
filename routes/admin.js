@@ -15,6 +15,8 @@ const User = require('../models/User');
 const RecipeLike = require('../models/RecipeLike');
 const Collection = require('../models/Collection');
 const BrowseHistory = require('../models/BrowseHistory');
+const RecipeNote = require('../models/RecipeNote');
+const MealPlan = require('../models/MealPlan');
 
 // ========== 管理员账号配置 ==========
 // 生产环境应从数据库读取，这里简化处理
