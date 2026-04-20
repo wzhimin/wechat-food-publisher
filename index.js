@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 // ========== 数据库初始化 ==========
-const { init } = require('./db');
+const { init, sequelize } = require('./db');
 const User = require('./models/User');
 const Todo = require('./models/Todo');
 const Recipe = require('./models/Recipe');
