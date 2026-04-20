@@ -618,13 +618,13 @@ router.post('/recipes/batch-delete', checkAuth, async (req, res) => {
       return res.status(400).json({ error: '请选择要删除的菜谱' });
     }
     
-    // 先删除关联数据
-    await Collection.destroy({ where: { recipe_id: recipeIds } });
-    await RecipeLike.destroy({ where: { recipe_id: recipeIds } });
-    await RecipeComment.destroy({ where: { recipe_id: recipeIds } });
-    await RecipeNote.destroy({ where: { recipe_id: recipeIds } });
-    await BrowseHistory.destroy({ where: { recipe_id: recipeIds } });
-    await MealPlan.destroy({ where: { recipe_id: recipeIds } });
+    // 先删除关联数据（使用 Sequelize 字段名 recipeId）
+    await Collection.destroy({ where: { recipeId: recipeIds } });
+    await RecipeLike.destroy({ where: { recipeId: recipeIds } });
+    await RecipeComment.destroy({ where: { recipeId: recipeIds } });
+    await RecipeNote.destroy({ where: { recipeId: recipeIds } });
+    await BrowseHistory.destroy({ where: { recipeId: recipeIds } });
+    await MealPlan.destroy({ where: { recipeId: recipeIds } });
     
     // 删除菜谱
     const deleted = await Recipe.destroy({ where: { id: recipeIds } });
