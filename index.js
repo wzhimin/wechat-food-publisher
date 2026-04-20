@@ -688,31 +688,33 @@ const port = process.env.PORT || 80;
 // ========== 启动 ==========
 init()
   .then(async () => {
-    // 旧模型同步（alter: true 确保表不存在则创建，已存在则同步结构）
-    // 错误处理：表已有64索引时跳过（不影响启动）
-    const syncModel = async (Model, name) => {
+    // 旧模型同步：先用 SHOW TABLES 确认表是否存在，不存在才创建
+    // 避免 alter: true 触发已有表的结构对比导致"64索引上限"报错
+    const syncModelIfAbsent = async (Model, name) => {
       try {
-        await Model.sync({ alter: true });
-        console.log(`[sync] ${name} OK`);
-      } catch (e) {
-        if (e.message.includes('Too many keys')) {
-          console.warn(`[sync] ${name} 跳过（索引已达上限）`);
+        const tableName = Model.getTableName();
+        const [rows] = await sequelize.query(`SHOW TABLES LIKE '${tableName}'`);
+        if (rows.length === 0) {
+          await Model.sync({ force: false });
+          console.log(`[sync] ${name} 创建完成`);
         } else {
-          throw e;
+          console.log(`[sync] ${name} 已存在，跳过`);
         }
+      } catch (e) {
+        console.error(`[sync] ${name} 出错:`, e.message);
       }
     };
-    await syncModel(User, 'User');
-    await syncModel(Todo, 'Todo');
-    await syncModel(Recipe, 'Recipe');
-    await syncModel(Collection, 'Collection');
-    await syncModel(MealPlan, 'MealPlan');
-    await syncModel(BrowseHistory, 'BrowseHistory');
-    await syncModel(Feedback, 'Feedback');
-    await syncModel(RecipeNote, 'RecipeNote');
-    await syncModel(RecipeLike, 'RecipeLike');
-    await syncModel(RecipeComment, 'RecipeComment');
-    await syncModel(UserFollow, 'UserFollow');
+    await syncModelIfAbsent(User, 'User');
+    await syncModelIfAbsent(Todo, 'Todo');
+    await syncModelIfAbsent(Recipe, 'Recipe');
+    await syncModelIfAbsent(Collection, 'Collection');
+    await syncModelIfAbsent(MealPlan, 'MealPlan');
+    await syncModelIfAbsent(BrowseHistory, 'BrowseHistory');
+    await syncModelIfAbsent(Feedback, 'Feedback');
+    await syncModelIfAbsent(RecipeNote, 'RecipeNote');
+    await syncModelIfAbsent(RecipeLike, 'RecipeLike');
+    await syncModelIfAbsent(RecipeComment, 'RecipeComment');
+    await syncModelIfAbsent(UserFollow, 'UserFollow');
     // Report 是新模型，用 force:false 确保表不存在时创建
     await Report.sync({ force: false });
 
