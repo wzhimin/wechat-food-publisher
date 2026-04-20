@@ -142,8 +142,16 @@ router.get('/stats', checkAuth, async (req, res) => {
 // GET /api/admin/comments/list
 router.get('/comments/list', checkAuth, async (req, res) => {
   try {
-    const { status = 'pending', page = 1, pageSize = 50 } = req.query;
-    const where = status !== 'all' ? { status } : {};
+    const { status = 'approved', page = 1, pageSize = 50 } = req.query;
+    // status=NULL 的旧评论视为 approved
+    let where = {};
+    if (status === 'all') {
+      where = {};
+    } else if (status === 'approved') {
+      where = { [Op.or]: [{ status: 'approved' }, { status: null }] };
+    } else {
+      where = { status };
+    }
     
     const comments = await RecipeComment.findAll({
       where,
@@ -157,11 +165,16 @@ router.get('/comments/list', checkAuth, async (req, res) => {
     const users = await User.findAll({ where: { openid: openids }, attributes: ['openid', 'nickName', 'avatarUrl'] });
     const userMap = Object.fromEntries(users.map(u => [u.openid, u]));
     
-    const data = comments.map(c => ({
-      ...c.toJSON(),
-      nickName: userMap[c.openid]?.nickName,
-      avatarUrl: userMap[c.openid]?.avatarUrl,
-    }));
+    const data = comments.map(c => {
+      const json = c.toJSON();
+      // 旧评论 status=null 视为 approved
+      if (!json.status) json.status = 'approved';
+      return {
+        ...json,
+        nickName: userMap[c.openid]?.nickName,
+        avatarUrl: userMap[c.openid]?.avatarUrl,
+      };
+    });
     
     res.json({ success: true, data });
   } catch (err) {

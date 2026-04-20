@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const { Op } = require('sequelize');
 const RecipeComment = require('../models/RecipeComment');
 const Recipe = require('../models/Recipe');
 const User = require('../models/User');
@@ -48,8 +49,9 @@ router.get('/list', async (req, res) => {
     if (!recipeId) return res.status(400).json({ error: '缺少 recipeId' });
 
     // 只显示已通过的评论
+    const approvedWhere = { [Op.or]: [{ status: 'approved' }, { status: null }] };
     const comments = await RecipeComment.findAll({
-      where: { recipeId, replyTo: null, status: 'approved' },
+      where: { recipeId, replyTo: null, ...approvedWhere },
       order: [['created_at', 'DESC']],
     });
 
@@ -61,7 +63,7 @@ router.get('/list', async (req, res) => {
 
     const commentIds = comments.map(c => c.id);
     const replies = commentIds.length
-      ? await RecipeComment.findAll({ where: { replyTo: commentIds, status: 'approved' }, order: [['created_at', 'ASC']] })
+      ? await RecipeComment.findAll({ where: { replyTo: commentIds, ...approvedWhere }, order: [['created_at', 'ASC']] })
       : [];
 
     const replyMap = {};

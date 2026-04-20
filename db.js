@@ -93,6 +93,14 @@ async function init() {
     }
   } catch (e) { console.error('[迁移] feedbacks 出错:', e.message); }
 
+  // 第四步：修复旧评论 status=NULL → 'approved'
+  try {
+    const [result] = await sequelize.query("UPDATE recipe_comments SET status='approved' WHERE status IS NULL");
+    if (result.affectedRows > 0) {
+      console.log(`[迁移] recipe_comments status NULL → approved (${result.affectedRows} 条)`);
+    }
+  } catch (e) { console.error('[迁移] recipe_comments status 修复出错:', e.message); }
+
   // 第三步：同步 Counter 表
   await Counter.sync({ alter: true });
 }
