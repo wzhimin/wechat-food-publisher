@@ -718,6 +718,15 @@ init()
     await syncModelIfAbsent(Collection, 'Collection');
     await syncModelIfAbsent(MealPlan, 'MealPlan');
     await syncModelIfAbsent(BrowseHistory, 'BrowseHistory');
+    // 迁移 feedback → feedbacks（历史命名错误，Feedback.tableName 之前是单数）
+    try {
+      const [oldTable] = await sequelize.query(`SHOW TABLES LIKE 'feedback'`);
+      const [newTable] = await sequelize.query(`SHOW TABLES LIKE 'feedbacks'`);
+      if (oldTable.length > 0 && newTable.length === 0) {
+        await sequelize.query('RENAME TABLE feedback TO feedbacks');
+        console.log('[迁移] feedback → feedbacks 完成');
+      }
+    } catch (e) { console.error('[迁移] feedback 重命名失败:', e.message); }
     await syncModelIfAbsent(Feedback, 'Feedback');
     await syncModelIfAbsent(RecipeNote, 'RecipeNote');
     await syncModelIfAbsent(RecipeLike, 'RecipeLike');

@@ -40,7 +40,7 @@ const Feedback = sequelize.define('Feedback', {
     comment: '处理时间',
   },
 }, {
-  tableName: 'feedback',
+  tableName: 'feedbacks',
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',
