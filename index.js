@@ -660,6 +660,20 @@ app.use('/api/collect', collectionRouter);
 app.use('/api/meal', mealRouter);
 app.use('/api/history', historyRouter);
 app.use('/api/feedback', feedbackRouter);
+// 调试接口：查看 users 表列名
+app.get('/api/admin/debug/columns', async (req, res) => {
+  try {
+    const { sequelize } = require('./db');
+    const cols = await sequelize.query('SHOW COLUMNS FROM users', { type: sequelize.QueryTypes.SELECT });
+    const reportsTable = await sequelize.query("SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_schema='nodejs_demo' AND table_name='reports'", { type: sequelize.QueryTypes.SELECT });
+    res.json({
+      users_columns: cols.map(c => c.Field),
+      reports_exists: reportsTable[0].cnt > 0,
+      git_commit: require('child_process').execSync('git -C . rev-parse HEAD').toString().trim()
+    });
+  } catch(e) { res.json({ error: e.message }); }
+});
+
 app.use('/api/admin', adminRouter);
 app.use('/api/note', noteRouter);
 app.use('/api/like', likeRouter);
