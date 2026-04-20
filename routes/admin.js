@@ -15,7 +15,6 @@ const User = require('../models/User');
 const RecipeLike = require('../models/RecipeLike');
 const Collection = require('../models/Collection');
 const BrowseHistory = require('../models/BrowseHistory');
-const RecipeNote = require('../models/RecipeNote');
 const MealPlan = require('../models/MealPlan');
 
 // ========== 管理员账号配置 ==========
@@ -620,11 +619,10 @@ router.post('/recipes/batch-delete', checkAuth, async (req, res) => {
       return res.status(400).json({ error: '请选择要删除的菜谱' });
     }
     
-    // 先删除关联数据（使用 Sequelize 字段名 recipeId）
+    // 先删除关联数据（RecipeNote 没有 recipeId，不关联菜谱）
     await Collection.destroy({ where: { recipeId: recipeIds } });
     await RecipeLike.destroy({ where: { recipeId: recipeIds } });
     await RecipeComment.destroy({ where: { recipeId: recipeIds } });
-    await RecipeNote.destroy({ where: { recipeId: recipeIds } });
     await BrowseHistory.destroy({ where: { recipeId: recipeIds } });
     await MealPlan.destroy({ where: { recipeId: recipeIds } });
     
