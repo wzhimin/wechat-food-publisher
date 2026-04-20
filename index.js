@@ -696,6 +696,21 @@ const port = process.env.PORT || 80;
 // ========== 启动 ==========
 init()
   .then(async () => {
+    // 第一步：清理 users 表历史遗留的 62 个重复 openid_N 索引（只保留 openid 本身）
+    try {
+      const idxs = await sequelize.query(
+        "SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA='nodejs_demo' AND TABLE_NAME='users' AND INDEX_NAME LIKE 'openid_%'",
+        { type: sequelize.QueryTypes.SELECT }
+      );
+      for (const { INDEX_NAME } of idxs) {
+        if (INDEX_NAME === 'openid') continue; // 保留主索引
+        try {
+          await sequelize.query(`DROP INDEX \`${INDEX_NAME}\` ON users`);
+          console.log(`[清理] 删除 users.${INDEX_NAME}`);
+        } catch (e) { /* 忽略已删 */ }
+      }
+    } catch (e) { console.error('[清理] 索引失败:', e.message); }
+
     // 旧模型同步：先用 SHOW TABLES 确认表是否存在，不存在才创建
     // 避免 alter: true 触发已有表的结构对比导致"64索引上限"报错
     const syncModelIfAbsent = async (Model, name) => {
