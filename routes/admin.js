@@ -234,6 +234,36 @@ router.post('/comments/restore', checkAuth, async (req, res) => {
   }
 });
 
+// POST /api/admin/comments/approve
+router.post('/comments/approve', checkAuth, async (req, res) => {
+  try {
+    const { commentId } = req.body;
+    const comment = await RecipeComment.findByPk(commentId);
+    if (!comment) return res.status(404).json({ error: '评论不存在' });
+    comment.status = 'approved';
+    await comment.save();
+    res.json({ success: true, message: '评论已通过' });
+  } catch (err) {
+    console.error('[/api/admin/comments/approve]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/comments/reject
+router.post('/comments/reject', checkAuth, async (req, res) => {
+  try {
+    const { commentId } = req.body;
+    const comment = await RecipeComment.findByPk(commentId);
+    if (!comment) return res.status(404).json({ error: '评论不存在' });
+    comment.status = 'rejected';
+    await comment.save();
+    res.json({ success: true, message: '评论已拒绝' });
+  } catch (err) {
+    console.error('[/api/admin/comments/reject]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== 菜谱管理 ==========
 
 // GET /api/admin/recipes/list

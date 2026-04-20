@@ -156,8 +156,6 @@
       <select id="statusFilter" onchange="loadComments()">
         <option value="approved">已通过</option>
         <option value="deleted">已删除</option>
-        <option value="pending">待审核</option>
-        <option value="rejected">已拒绝</option>
         <option value="all">全部</option>
       </select>
     </div>
@@ -214,15 +212,15 @@
             </div>
             <div class="comment-content">${escapeHtml(c.content)}</div>
             <div class="comment-recipe">菜谱：<a href="#">ID: ${c.recipeId}</a></div>
-            ${c.status !== 'pending' ? `
+            ${c.status === 'deleted' ? `
               <div class="comment-actions">
-                ${c.status === 'deleted' ? `
-                  <button class="btn btn-primary" onclick="restoreComment(${c.id})">还原</button>
-                ` : `
-                  <button class="btn btn-danger" onclick="deleteComment(${c.id})">删除</button>
-                `}
+                <button class="btn btn-primary" onclick="restoreComment(${c.id})">还原</button>
               </div>
-            ` : ''}
+            ` : `
+              <div class="comment-actions">
+                <button class="btn btn-danger" onclick="deleteComment(${c.id})">删除</button>
+              </div>
+            `}
           </div>
         `).join('');
       } catch (e) {
