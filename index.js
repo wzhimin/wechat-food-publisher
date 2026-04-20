@@ -689,17 +689,30 @@ const port = process.env.PORT || 80;
 init()
   .then(async () => {
     // 旧模型同步（alter: true 确保表不存在则创建，已存在则同步结构）
-    await User.sync({ alter: true });
-    await Todo.sync({ alter: true });
-    await Recipe.sync({ alter: true });
-    await Collection.sync({ alter: true });
-    await MealPlan.sync({ alter: true });
-    await BrowseHistory.sync({ alter: true });
-    await Feedback.sync({ alter: true });
-    await RecipeNote.sync({ alter: true });
-    await RecipeLike.sync({ alter: true });
-    await RecipeComment.sync({ alter: true });
-    await UserFollow.sync({ alter: true });
+    // 错误处理：表已有64索引时跳过（不影响启动）
+    const syncModel = async (Model, name) => {
+      try {
+        await Model.sync({ alter: true });
+        console.log(`[sync] ${name} OK`);
+      } catch (e) {
+        if (e.message.includes('Too many keys')) {
+          console.warn(`[sync] ${name} 跳过（索引已达上限）`);
+        } else {
+          throw e;
+        }
+      }
+    };
+    await syncModel(User, 'User');
+    await syncModel(Todo, 'Todo');
+    await syncModel(Recipe, 'Recipe');
+    await syncModel(Collection, 'Collection');
+    await syncModel(MealPlan, 'MealPlan');
+    await syncModel(BrowseHistory, 'BrowseHistory');
+    await syncModel(Feedback, 'Feedback');
+    await syncModel(RecipeNote, 'RecipeNote');
+    await syncModel(RecipeLike, 'RecipeLike');
+    await syncModel(RecipeComment, 'RecipeComment');
+    await syncModel(UserFollow, 'UserFollow');
     // Report 是新模型，用 force:false 确保表不存在时创建
     await Report.sync({ force: false });
 
