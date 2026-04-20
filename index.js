@@ -660,7 +660,7 @@ app.use('/api/collect', collectionRouter);
 app.use('/api/meal', mealRouter);
 app.use('/api/history', historyRouter);
 app.use('/api/feedback', feedbackRouter);
-// 调试接口：查看各表列名
+// 调试接口：查看各表列名 + users 表索引详情
 app.get('/api/admin/debug/columns', async (req, res) => {
   try {
     const { sequelize } = require('./db');
@@ -672,6 +672,10 @@ app.get('/api/admin/debug/columns', async (req, res) => {
     }
     const reportsTable = await sequelize.query("SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_schema='nodejs_demo' AND table_name='reports'", { type: sequelize.QueryTypes.SELECT });
     result.reports_exists = reportsTable[0].cnt > 0;
+    // 查 users 表所有索引，看清是什么产生的
+    const indexes = await sequelize.query('SHOW INDEX FROM users', { type: sequelize.QueryTypes.SELECT });
+    result.users_indexes = indexes.map(i => ({ name: i.Key_name, column: i.Column_name, unique: i.Non_unique === 0 }));
+    result.users_index_count = indexes.length;
     res.json(result);
   } catch(e) { res.json({ error: e.message }); }
 });
