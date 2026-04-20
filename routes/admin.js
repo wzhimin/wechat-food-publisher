@@ -245,7 +245,7 @@ router.get('/recipes/list', checkAuth, async (req, res) => {
     });
     
     // 获取用户信息
-    const openids = [...new Set(recipes.map(r => r.openid).filter(Boolean))];
+    const openids = [...new Set(recipes.map(r => r.authorOpenid).filter(Boolean))];
     const users = openids.length 
       ? await User.findAll({ where: { openid: openids }, attributes: ['openid', 'nickName'] })
       : [];
@@ -253,7 +253,7 @@ router.get('/recipes/list', checkAuth, async (req, res) => {
     
     const data = recipes.map(r => ({
       ...r.toJSON(),
-      nickName: userMap[r.openid] || '系统',
+      nickName: userMap[r.authorOpenid] || '系统',
     }));
     
     res.json({ 
@@ -483,7 +483,7 @@ router.get('/users/stats', checkAuth, async (req, res) => {
       User.count({ where: { created_at: { [Op.gte]: today } } }),
       User.count({ where: { updated_at: { [Op.gte]: sevenDaysAgo } } }),
       dbSeq.query(
-        'SELECT COUNT(DISTINCT openid) as count FROM recipes',
+        'SELECT COUNT(DISTINCT authorOpenid) as count FROM recipes',
         { type: dbSeq.QueryTypes.SELECT }
       ),
     ]);
@@ -523,7 +523,7 @@ router.get('/users/list', checkAuth, async (req, res) => {
     if (openids.length > 0) {
       const [recipeCounts, collectCounts, likeCounts, noteCounts] = await Promise.all([
         dbSeq.query(
-          'SELECT openid, COUNT(*) as count FROM recipes WHERE openid IN (?) GROUP BY openid',
+          'SELECT authorOpenid AS openid, COUNT(*) as count FROM recipes WHERE authorOpenid IN (?) GROUP BY authorOpenid',
           { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
         ),
         dbSeq.query(
@@ -669,7 +669,7 @@ router.get('/reports/list', checkAuth, async (req, res) => {
       let target = null;
       if (r.type === 'recipe') {
         target = await Recipe.findByPk(r.target_id, {
-          attributes: ['id', 'title', 'cover', 'openid'],
+          attributes: ['id', 'title', 'cover', 'authorOpenid'],
         });
       } else if (r.type === 'comment') {
         target = await RecipeComment.findByPk(r.target_id, {
