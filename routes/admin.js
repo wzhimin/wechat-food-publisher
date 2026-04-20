@@ -12,6 +12,9 @@ const RecipeComment = require('../models/RecipeComment');
 const Recipe = require('../models/Recipe');
 const Feedback = require('../models/Feedback');
 const User = require('../models/User');
+const RecipeLike = require('../models/RecipeLike');
+const Collection = require('../models/Collection');
+const BrowseHistory = require('../models/BrowseHistory');
 
 // ========== 管理员账号配置 ==========
 // 生产环境应从数据库读取，这里简化处理
@@ -302,6 +305,57 @@ router.post('/recipes/feature', checkAuth, async (req, res) => {
   }
 });
 
+// POST /api/admin/recipes/update
+router.post('/recipes/update', checkAuth, async (req, res) => {
+  try {
+    const { recipeId, title, cover, difficulty, duration, tags, tips } = req.body;
+    
+    const recipe = await Recipe.findByPk(recipeId);
+    if (!recipe) {
+      return res.status(404).json({ error: '菜谱不存在' });
+    }
+    
+    if (title !== undefined) recipe.title = title;
+    if (cover !== undefined) recipe.cover = cover;
+    if (difficulty !== undefined) recipe.difficulty = difficulty;
+    if (duration !== undefined) recipe.duration = duration;
+    if (tags !== undefined) recipe.tags = tags;
+    if (tips !== undefined) recipe.tips = tips;
+    
+    await recipe.save();
+    
+    res.json({ success: true, message: '菜谱已更新' });
+  } catch (err) {
+    console.error('[/api/admin/recipes/update]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/recipes/delete
+router.post('/recipes/delete', checkAuth, async (req, res) => {
+  try {
+    const { recipeId } = req.body;
+    
+    const recipe = await Recipe.findByPk(recipeId);
+    if (!recipe) {
+      return res.status(404).json({ error: '菜谱不存在' });
+    }
+    
+    // 删除关联数据
+    await RecipeComment.destroy({ where: { recipeId } });
+    await RecipeLike.destroy({ where: { recipeId } });
+    await Collection.destroy({ where: { recipeId } });
+    
+    // 删除菜谱
+    await recipe.destroy();
+    
+    res.json({ success: true, message: '菜谱已删除' });
+  } catch (err) {
+    console.error('[/api/admin/recipes/delete]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== 反馈管理 ==========
 
 // GET /api/admin/feedbacks/list
@@ -380,6 +434,102 @@ router.post('/feedbacks/resolve', checkAuth, async (req, res) => {
     res.json({ success: true, message: '已标记为已处理' });
   } catch (err) {
     console.error('[/api/admin/feedbacks/resolve]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== 用户管理 ==========
+
+// GET /api/admin/users/stats
+router.get('/users/stats', checkAuth, async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const [
+      totalUsers,
+      todayUsers,
+      activeUsers,
+      contributors,
+    ] = await Promise.all([
+      User.count(),
+      User.count({ where: { created_at: { [Op.gte]: today } } }),
+      User.count({ where: { last_login: { [Op.gte]: sevenDaysAgo } } }),
+      dbSeq.query(
+        'SELECT COUNT(DISTINCT openid) as count FROM recipes',
+        { type: dbSeq.QueryTypes.SELECT }
+      ),
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        total: totalUsers,
+        today: todayUsers,
+        active7d: activeUsers,
+        contributors: contributors[0]?.count || 0,
+      },
+    });
+  } catch (err) {
+    console.error('[/api/admin/users/stats]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/admin/users/list
+router.get('/users/list', checkAuth, async (req, res) => {
+  try {
+    const { page = 1, pageSize = 50 } = req.query;
+    
+    const users = await User.findAll({
+      attributes: ['openid', 'nickName', 'avatarUrl', 'created_at', 'last_login'],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(pageSize),
+      offset: (parseInt(page) - 1) * parseInt(pageSize),
+    });
+    
+    // 统计每个用户的数据
+    const openids = users.map(u => u.openid).filter(Boolean);
+    
+    const [recipeCounts, collectCounts, likeCounts, noteCounts] = await Promise.all([
+      dbSeq.query(
+        'SELECT openid, COUNT(*) as count FROM recipes WHERE openid IN (?) GROUP BY openid',
+        { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
+      ),
+      dbSeq.query(
+        'SELECT openid, COUNT(*) as count FROM collections WHERE openid IN (?) GROUP BY openid',
+        { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
+      ),
+      dbSeq.query(
+        'SELECT openid, COUNT(*) as count FROM recipe_likes WHERE openid IN (?) GROUP BY openid',
+        { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
+      ),
+      dbSeq.query(
+        'SELECT openid, COUNT(*) as count FROM recipe_notes WHERE openid IN (?) GROUP BY openid',
+        { replacements: [openids], type: dbSeq.QueryTypes.SELECT }
+      ),
+    ]);
+    
+    const toMap = (arr) => Object.fromEntries(arr.map(x => [x.openid, x.count]));
+    const recipeMap = toMap(recipeCounts);
+    const collectMap = toMap(collectCounts);
+    const likeMap = toMap(likeCounts);
+    const noteMap = toMap(noteCounts);
+    
+    const data = users.map(u => ({
+      ...u.toJSON(),
+      recipeCount: recipeMap[u.openid] || 0,
+      collectCount: collectMap[u.openid] || 0,
+      likeCount: likeMap[u.openid] || 0,
+      noteCount: noteMap[u.openid] || 0,
+    }));
+    
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('[/api/admin/users/list]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

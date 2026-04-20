@@ -61,11 +61,16 @@
       display: flex;
       gap: 16px;
       align-items: center;
+      flex-wrap: wrap;
     }
     .filter-bar select, .filter-bar input {
       padding: 8px 12px;
       border: 1px solid #ddd;
       border-radius: 6px;
+    }
+    .search-box {
+      flex: 1;
+      min-width: 200px;
     }
     
     .recipe-table {
@@ -78,18 +83,26 @@
     th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #eee; }
     th { background: #f8f9fa; font-weight: 500; }
     .recipe-title { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .recipe-cover { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; }
+    .recipe-cover { 
+      width: 60px; 
+      height: 60px; 
+      object-fit: cover; 
+      border-radius: 6px; 
+      background: #f0f0f0;
+    }
     .status-badge {
       padding: 4px 10px;
       border-radius: 12px;
       font-size: 12px;
+      display: inline-block;
+      margin-right: 4px;
     }
     .status-approved { background: #d4edda; color: #155724; }
     .status-pending { background: #fff3cd; color: #856404; }
     .status-rejected { background: #f8d7da; color: #721c24; }
     .featured { background: #cce5ff; color: #004085; }
     
-    .actions { display: flex; gap: 8px; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .btn {
       padding: 6px 12px;
       border: none;
@@ -102,10 +115,68 @@
     .btn-danger { background: #e74c3c; color: white; }
     .btn-secondary { background: #95a5a6; color: white; }
     .btn-warning { background: #f39c12; color: white; }
+    .btn-info { background: #3498db; color: white; }
     .btn:hover { opacity: 0.9; }
     
     .empty { text-align: center; padding: 40px; color: #999; }
     .loading { text-align: center; padding: 40px; }
+    
+    /* 编辑弹窗 */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.show { display: flex; }
+    .modal-content {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .modal-header h3 { font-size: 18px; }
+    .modal-close {
+      font-size: 24px;
+      cursor: pointer;
+      color: #999;
+    }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; margin-bottom: 6px; font-weight: 500; }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+    }
+    .form-group textarea { min-height: 100px; resize: vertical; }
+    .modal-footer {
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    
+    /* 详情弹窗 */
+    .detail-section { margin-bottom: 16px; }
+    .detail-section h4 { margin-bottom: 8px; color: #333; }
+    .detail-section p { color: #666; line-height: 1.6; }
+    .ingredient-list, .step-list { padding-left: 20px; }
+    .ingredient-list li, .step-list li { margin-bottom: 6px; color: #666; }
   </style>
 </head>
 <body>
@@ -115,6 +186,7 @@
     <a href="comments.html">💬 评论审核</a>
     <a href="recipes.html" class="active">📖 菜谱管理</a>
     <a href="feedbacks.html">📝 用户反馈</a>
+    <a href="users.html">👥 用户管理</a>
     <div class="logout" onclick="logout()">退出登录</div>
   </div>
   
@@ -137,6 +209,8 @@
         <option value="1">已精选</option>
         <option value="0">未精选</option>
       </select>
+      <input type="text" id="searchInput" class="search-box" placeholder="搜索菜谱标题..." onkeyup="if(event.key==='Enter')loadRecipes()">
+      <button class="btn btn-primary" onclick="loadRecipes()">搜索</button>
     </div>
     
     <div class="recipe-table">
@@ -159,9 +233,67 @@
     </div>
   </div>
 
+  <!-- 编辑弹窗 -->
+  <div class="modal" id="editModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>编辑菜谱</h3>
+        <span class="modal-close" onclick="closeEditModal()">&times;</span>
+      </div>
+      <div class="form-group">
+        <label>标题</label>
+        <input type="text" id="editTitle">
+      </div>
+      <div class="form-group">
+        <label>封面图URL</label>
+        <input type="text" id="editCover" placeholder="https://...">
+        <div style="margin-top:8px;">
+          <img id="editCoverPreview" src="" style="max-width:200px;max-height:150px;border-radius:6px;display:none;">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>难度</label>
+        <select id="editDifficulty">
+          <option value="1">简单</option>
+          <option value="2">中等</option>
+          <option value="3">困难</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>烹饪时长</label>
+        <input type="text" id="editDuration" placeholder="如：30分钟">
+      </div>
+      <div class="form-group">
+        <label>标签（逗号分隔）</label>
+        <input type="text" id="editTags" placeholder="下饭菜,家常菜">
+      </div>
+      <div class="form-group">
+        <label>小贴士</label>
+        <textarea id="editTips" rows="3"></textarea>
+      </div>
+      <input type="hidden" id="editRecipeId">
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeEditModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveRecipe()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 详情弹窗 -->
+  <div class="modal" id="detailModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>菜谱详情</h3>
+        <span class="modal-close" onclick="closeDetailModal()">&times;</span>
+      </div>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
   <script>
     const API_BASE = window.location.origin + '/api';
     let token = localStorage.getItem('admin_token') || '';
+    let allRecipes = [];
     
     if (!token) {
       location.href = 'index.html';
@@ -169,9 +301,22 @@
     
     loadRecipes();
     
+    // 封面预览
+    document.getElementById('editCover').addEventListener('input', function() {
+      const preview = document.getElementById('editCoverPreview');
+      if (this.value) {
+        preview.src = this.value;
+        preview.style.display = 'block';
+        preview.onerror = () => preview.style.display = 'none';
+      } else {
+        preview.style.display = 'none';
+      }
+    });
+    
     async function loadRecipes() {
       const status = document.getElementById('statusFilter').value;
       const featured = document.getElementById('featuredFilter').value;
+      const search = document.getElementById('searchInput').value.trim();
       const listEl = document.getElementById('recipeList');
       listEl.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
       
@@ -186,37 +331,165 @@
           return;
         }
         const data = await res.json();
+        allRecipes = data.data || [];
         
-        if (!data.data?.length) {
+        // 前端搜索过滤
+        let filtered = allRecipes;
+        if (search) {
+          filtered = allRecipes.filter(r => r.title && r.title.includes(search));
+        }
+        
+        if (!filtered.length) {
           listEl.innerHTML = '<tr><td colspan="7" class="empty">暂无菜谱</td></tr>';
           return;
         }
         
-        listEl.innerHTML = data.data.map(r => `
+        listEl.innerHTML = filtered.map(r => `
           <tr>
-            <td><img class="recipe-cover" src="${r.coverUrl || 'https://via.placeholder.com/60'}" alt=""></td>
+            <td><img class="recipe-cover" src="${getCoverUrl(r.cover)}" alt="" onerror="this.src='https://via.placeholder.com/60?text=No'"></td>
             <td class="recipe-title" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</td>
-            <td>${r.nickName || '用户'}</td>
+            <td>${r.nickName || '系统'}</td>
             <td>
               <span class="status-badge status-${r.status}">${getStatusText(r.status)}</span>
               ${r.is_featured ? '<span class="status-badge featured">精选</span>' : ''}
             </td>
             <td>${r.collectCount || 0} / ${r.likeCount || 0}</td>
-            <td>${new Date(r.created_at).toLocaleDateString()}</td>
+            <td>${formatDate(r.created_at)}</td>
             <td class="actions">
+              <button class="btn btn-sm btn-info" onclick="showDetail(${r.id})">详情</button>
+              <button class="btn btn-sm btn-warning" onclick="editRecipe(${r.id})">编辑</button>
               ${r.status === 'pending' ? `
                 <button class="btn btn-sm btn-primary" onclick="approveRecipe(${r.id})">通过</button>
                 <button class="btn btn-sm btn-danger" onclick="rejectRecipe(${r.id})">拒绝</button>
               ` : ''}
               ${!r.is_featured ? 
-                `<button class="btn btn-sm btn-warning" onclick="featureRecipe(${r.id})">设精选</button>` :
+                `<button class="btn btn-sm btn-secondary" onclick="featureRecipe(${r.id})">设精选</button>` :
                 `<button class="btn btn-sm btn-secondary" onclick="unfeatureRecipe(${r.id})">取消精选</button>`
               }
+              <button class="btn btn-sm btn-danger" onclick="deleteRecipe(${r.id})">删除</button>
             </td>
           </tr>
         `).join('');
       } catch (e) {
+        console.error(e);
         listEl.innerHTML = '<tr><td colspan="7" class="empty">网络错误</td></tr>';
+      }
+    }
+    
+    function getCoverUrl(cover) {
+      if (!cover) return 'https://via.placeholder.com/60?text=No';
+      if (cover.startsWith('http')) return cover;
+      // 如果是相对路径，添加域名前缀
+      return cover;
+    }
+    
+    function showDetail(id) {
+      const r = allRecipes.find(x => x.id === id);
+      if (!r) return;
+      
+      let ingredients = [];
+      let steps = [];
+      try {
+        ingredients = JSON.parse(r.ingredients || '[]');
+        steps = JSON.parse(r.steps || '[]');
+      } catch (e) {}
+      
+      const content = `
+        <div class="detail-section">
+          <img src="${getCoverUrl(r.cover)}" style="max-width:100%;max-height:300px;border-radius:8px;" onerror="this.style.display='none'">
+        </div>
+        <div class="detail-section">
+          <h4>标题</h4>
+          <p>${escapeHtml(r.title)}</p>
+        </div>
+        <div class="detail-section">
+          <h4>难度/时长</h4>
+          <p>${['','简单','中等','困难'][r.difficulty || 2]} · ${r.duration || '未知'}</p>
+        </div>
+        <div class="detail-section">
+          <h4>食材</h4>
+          <ul class="ingredient-list">
+            ${ingredients.map(i => `<li>${escapeHtml(i)}</li>`).join('') || '<li>无</li>'}
+          </ul>
+        </div>
+        <div class="detail-section">
+          <h4>步骤</h4>
+          <ol class="step-list">
+            ${steps.map(s => `<li>${escapeHtml(s)}</li>`).join('') || '<li>无</li>'}
+          </ol>
+        </div>
+        ${r.tips ? `
+        <div class="detail-section">
+          <h4>小贴士</h4>
+          <p>${escapeHtml(r.tips)}</p>
+        </div>
+        ` : ''}
+      `;
+      
+      document.getElementById('detailContent').innerHTML = content;
+      document.getElementById('detailModal').classList.add('show');
+    }
+    
+    function closeDetailModal() {
+      document.getElementById('detailModal').classList.remove('show');
+    }
+    
+    function editRecipe(id) {
+      const r = allRecipes.find(x => x.id === id);
+      if (!r) return;
+      
+      document.getElementById('editRecipeId').value = id;
+      document.getElementById('editTitle').value = r.title || '';
+      document.getElementById('editCover').value = r.cover || '';
+      document.getElementById('editDifficulty').value = r.difficulty || 2;
+      document.getElementById('editDuration').value = r.duration || '';
+      document.getElementById('editTags').value = r.tags || '';
+      document.getElementById('editTips').value = r.tips || '';
+      
+      // 显示封面预览
+      const preview = document.getElementById('editCoverPreview');
+      if (r.cover) {
+        preview.src = r.cover;
+        preview.style.display = 'block';
+      } else {
+        preview.style.display = 'none';
+      }
+      
+      document.getElementById('editModal').classList.add('show');
+    }
+    
+    function closeEditModal() {
+      document.getElementById('editModal').classList.remove('show');
+    }
+    
+    async function saveRecipe() {
+      const id = document.getElementById('editRecipeId').value;
+      const body = {
+        token,
+        recipeId: parseInt(id),
+        title: document.getElementById('editTitle').value,
+        cover: document.getElementById('editCover').value,
+        difficulty: parseInt(document.getElementById('editDifficulty').value),
+        duration: document.getElementById('editDuration').value,
+        tags: document.getElementById('editTags').value,
+        tips: document.getElementById('editTips').value,
+      };
+      
+      try {
+        const res = await fetch(`${API_BASE}/admin/recipes/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeEditModal();
+          loadRecipes();
+        } else {
+          alert(data.error || '保存失败');
+        }
+      } catch (e) {
+        alert('网络错误');
       }
     }
     
@@ -231,6 +504,7 @@
     }
     
     async function featureRecipe(id) {
+      if (!confirm('确定设为精选？')) return;
       await fetch(`${API_BASE}/admin/recipes/feature`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -240,12 +514,33 @@
     }
     
     async function unfeatureRecipe(id) {
+      if (!confirm('确定取消精选？')) return;
       await fetch(`${API_BASE}/admin/recipes/feature`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, recipeId: id, isFeatured: false })
       });
       loadRecipes();
+    }
+    
+    async function deleteRecipe(id) {
+      if (!confirm('确定删除该菜谱？此操作不可恢复！')) return;
+      
+      try {
+        const res = await fetch(`${API_BASE}/admin/recipes/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, recipeId: id })
+        });
+        const data = await res.json();
+        if (data.success) {
+          loadRecipes();
+        } else {
+          alert(data.error || '删除失败');
+        }
+      } catch (e) {
+        alert('网络错误');
+      }
     }
     
     async function updateStatus(id, action) {
@@ -275,8 +570,15 @@
       return { pending: '待审核', approved: '已发布', rejected: '已拒绝' }[status] || status;
     }
     
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const d = new Date(dateStr);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    
     function escapeHtml(str) {
-      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
     
     function logout() {
