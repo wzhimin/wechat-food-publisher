@@ -667,8 +667,12 @@ app.get('/api/admin/debug/columns', async (req, res) => {
     const tables = ['users', 'recipes', 'collections', 'recipe_likes', 'recipe_notes', 'recipe_comments', 'feedbacks'];
     const result = {};
     for (const t of tables) {
-      const cols = await sequelize.query(`SHOW COLUMNS FROM ${t}`, { type: sequelize.QueryTypes.SELECT });
-      result[t] = cols.map(c => c.Field);
+      try {
+        const cols = await sequelize.query(`SHOW COLUMNS FROM ${t}`, { type: sequelize.QueryTypes.SELECT });
+        result[t] = cols.map(c => c.Field);
+      } catch (e) {
+        result[t] = `表不存在: ${e.code || e.message}`;
+      }
     }
     const reportsTable = await sequelize.query("SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_schema='nodejs_demo' AND table_name='reports'", { type: sequelize.QueryTypes.SELECT });
     result.reports_exists = reportsTable[0].cnt > 0;
