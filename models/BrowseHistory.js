@@ -23,10 +23,7 @@ const BrowseHistory = sequelize.define('BrowseHistory', {
   tableName: 'browse_history',
   timestamps: false,
   updatedAt: false,
-  indexes: [
-    { fields: ['openid', 'viewed_at'], name: 'idx_openid_time' },
-    { fields: ['openid', 'recipe_id'], name: 'idx_openid_recipe' },
-  ],
+  // 索引通过数据库迁移创建
 });
 
 module.exports = BrowseHistory;

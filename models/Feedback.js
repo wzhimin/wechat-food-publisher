@@ -44,9 +44,7 @@ const Feedback = sequelize.define('Feedback', {
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',
-  indexes: [
-    { fields: ['status'], name: 'idx_status' },
-  ],
+  // 索引通过数据库迁移创建
 });
 
 module.exports = Feedback;

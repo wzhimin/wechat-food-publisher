@@ -18,9 +18,7 @@ const RecipeLike = sequelize.define('RecipeLike', {
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: false,
-  indexes: [
-    { unique: true, fields: ['openid', 'recipe_id'], name: 'uk_like' },
-  ],
+  // 唯一索引通过数据库迁移创建，避免 alter safe 时字段不存在报错
 });
 
 module.exports = RecipeLike;

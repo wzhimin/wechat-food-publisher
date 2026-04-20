@@ -18,13 +18,7 @@ const Collection = sequelize.define('Collection', {
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: false,
-  indexes: [
-    {
-      unique: true,
-      fields: ['openid', 'recipe_id'],
-      name: 'idx_user_recipe_unique',
-    },
-  ],
+  // 唯一索引通过数据库迁移创建
 });
 
 module.exports = Collection;

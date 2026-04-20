@@ -89,10 +89,7 @@ const Recipe = sequelize.define('Recipe', {
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',
-  indexes: [
-    { fields: ['status'], name: 'idx_status' },
-    { fields: ['is_featured'], name: 'idx_featured' },
-  ],
+  // 索引通过数据库迁移或手动创建，避免 alter safe 时字段不存在报错
 });
 
 module.exports = Recipe;

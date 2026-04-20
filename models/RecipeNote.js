@@ -33,9 +33,7 @@ const RecipeNote = sequelize.define('RecipeNote', {
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',
-  indexes: [
-    { fields: ['openid', 'created_at'], name: 'idx_openid_time' },
-  ],
+  // 索引通过数据库迁移创建
 });
 
 module.exports = RecipeNote;

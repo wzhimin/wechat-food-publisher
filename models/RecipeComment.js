@@ -34,10 +34,7 @@ const RecipeComment = sequelize.define('RecipeComment', {
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: false,
-  indexes: [
-    { fields: ['recipe_id', 'created_at'], name: 'idx_recipe_time' },
-    { fields: ['status'], name: 'idx_status' },
-  ],
+  // 索引通过数据库迁移或手动创建
 });
 
 module.exports = RecipeComment;
