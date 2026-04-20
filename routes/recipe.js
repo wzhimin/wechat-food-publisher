@@ -59,6 +59,18 @@ async function checkRecipeContent(recipe) {
   return { passed: true };
 }
 
+// 检查图片URL是否来自用户上传（需要审核）
+// 系统同步的图片来自 Pixabay，用户上传的来自微信素材
+function isUserUploadedImage(url) {
+  if (!url) return false;
+  // 微信素材 URL 通常包含 mmbiz.qpic.cn 或 weixin.qq.com
+  return url.includes('mmbiz.qpic.cn') || url.includes('weixin.qq.com');
+}
+
+// 导出审核函数供其他模块使用
+module.exports.checkTextContent = checkTextContent;
+module.exports.checkRecipeContent = checkRecipeContent;
+
 // GET /api/recipe/list
 // 查询菜谱列表，支持搜索、分类、时令筛选、排序
 // ?kw=红烧肉  按菜名/食材搜索
