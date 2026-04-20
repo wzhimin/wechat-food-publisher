@@ -18,6 +18,7 @@ const RecipeNote = require('./models/RecipeNote');
 const RecipeLike = require('./models/RecipeLike');
 const RecipeComment = require('./models/RecipeComment');
 const UserFollow = require('./models/UserFollow');
+const Report = require('./models/Report');
 
 // ========== 小程序接口路由 ==========
 const userRouter = require('./routes/user');
@@ -683,6 +684,21 @@ init()
     await RecipeLike.sync({ alter: 'safe' });
     await RecipeComment.sync({ alter: 'safe' });
     await UserFollow.sync({ alter: 'safe' });
+    // Report 是新模型，用 force:false 确保表不存在时创建
+    await Report.sync({ force: false });
+
+    // 统一列名：openId → openid（历史遗留大小写不一致）
+    const tablesToCheck = ['users', 'recipes', 'collections', 'recipe_likes', 'recipe_notes', 'recipe_comments', 'feedbacks'];
+    for (const table of tablesToCheck) {
+      try {
+        const [cols] = await sequelize.query(`SHOW COLUMNS FROM ${table} LIKE 'openId'`);
+        if (cols.length > 0) {
+          await sequelize.query(`ALTER TABLE ${table} CHANGE COLUMN openId openid VARCHAR(64) NOT NULL`);
+          console.log(`[迁移] ${table}.openId → openid`);
+        }
+      } catch (e) { /* 表不存在或无权限，忽略 */ }
+    }
+
     console.log('数据库初始化完成');
 
     // 确保 recipes.title 唯一索引存在（用于菜谱去重 upsert）

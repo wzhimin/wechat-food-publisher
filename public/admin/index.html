@@ -162,7 +162,7 @@
     <div class="sidebar">
       <h2>👔 味可觅后台</h2>
       <a href="index.html" class="active">📊 概览</a>
-      <a href="comments.html">💬 评论审核</a>
+      <a href="comments.html">💬 评论管理</a>
       <a href="recipes.html">📖 菜谱管理</a>
       <a href="feedbacks.html">📝 用户反馈</a>
       <a href="users.html">👥 用户管理</a>
@@ -183,9 +183,9 @@
       
       <div class="quick-actions">
         <div class="action-card">
-          <h3>💬 评论审核</h3>
-          <p>审核用户发布的评论内容，支持批量操作</p>
-          <a href="comments.html">进入审核</a>
+          <h3>💬 评论管理</h3>
+          <p>查看和管理用户评论，支持删除违规内容或还原误删</p>
+          <a href="comments.html">进入管理</a>
         </div>
         <div class="action-card">
           <h3>📖 菜谱管理</h3>
@@ -273,13 +273,13 @@
     function renderStats(stats) {
       const grid = document.getElementById('statsGrid');
       grid.innerHTML = `
-        <div class="stat-card pending">
-          <h3>待审核评论</h3>
-          <div class="number">${stats.comments?.pending || 0}</div>
-        </div>
         <div class="stat-card success">
           <h3>已通过评论</h3>
           <div class="number">${stats.comments?.approved || 0}</div>
+        </div>
+        <div class="stat-card">
+          <h3>已删除评论</h3>
+          <div class="number">${stats.comments?.deleted || 0}</div>
         </div>
         <div class="stat-card">
           <h3>菜谱总数</h3>

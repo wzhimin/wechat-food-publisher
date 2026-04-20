@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>评论审核 - 味可觅后台</title>
+  <title>评论管理 - 味可觅后台</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -45,14 +45,15 @@
       cursor: pointer;
     }
     .sidebar .logout:hover { color: white; }
-    
+
     .main-content {
       margin-left: 220px;
       padding: 30px;
     }
     .page-header { margin-bottom: 20px; }
     .page-header h1 { font-size: 24px; margin-bottom: 8px; }
-    
+    .page-header p { color: #666; font-size: 14px; }
+
     /* 筛选栏 */
     .filter-bar {
       background: white;
@@ -68,7 +69,7 @@
       border: 1px solid #ddd;
       border-radius: 6px;
     }
-    
+
     /* 列表 */
     .comment-list { display: flex; flex-direction: column; gap: 12px; }
     .comment-card {
@@ -76,6 +77,10 @@
       padding: 20px;
       border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .comment-card.is-deleted {
+      opacity: 0.6;
+      background: #fafafa;
     }
     .comment-header {
       display: flex;
@@ -103,11 +108,12 @@
     .status-pending { background: #fff3cd; color: #856404; }
     .status-approved { background: #d4edda; color: #155724; }
     .status-rejected { background: #f8d7da; color: #721c24; }
-    
+    .status-deleted { background: #e2e3e5; color: #383d41; }
+
     .comment-content { margin-bottom: 12px; line-height: 1.6; }
     .comment-recipe { font-size: 13px; color: #666; margin-bottom: 12px; }
     .comment-recipe a { color: #3498db; }
-    
+
     .comment-actions { display: flex; gap: 10px; }
     .btn {
       padding: 8px 16px;
@@ -119,8 +125,9 @@
     .btn-primary { background: #27ae60; color: white; }
     .btn-danger { background: #e74c3c; color: white; }
     .btn-secondary { background: #95a5a6; color: white; }
+    .btn-warning { background: #f39c12; color: white; }
     .btn:hover { opacity: 0.9; }
-    
+
     .empty { text-align: center; padding: 40px; color: #999; }
     .loading { text-align: center; padding: 40px; }
   </style>
@@ -129,29 +136,32 @@
   <div class="sidebar">
     <h2>👔 味可觅后台</h2>
     <a href="index.html">📊 概览</a>
-    <a href="comments.html" class="active">💬 评论审核</a>
+    <a href="comments.html" class="active">💬 评论管理</a>
     <a href="recipes.html">📖 菜谱管理</a>
     <a href="feedbacks.html">📝 用户反馈</a>
     <a href="users.html">👥 用户管理</a>
     <a href="non-dishes.html">🗑️ 非菜谱清理</a>
+    <a href="reports.html">🚨 举报管理</a>
     <div class="logout" onclick="logout()">退出登录</div>
   </div>
-  
+
   <div class="main-content">
     <div class="page-header">
-      <h1>💬 评论审核</h1>
+      <h1>💬 评论管理</h1>
+      <p>评论发布后自动通过，管理员可删除违规评论或还原误删</p>
     </div>
-    
+
     <div class="filter-bar">
       <label>状态：</label>
       <select id="statusFilter" onchange="loadComments()">
-        <option value="pending">待审核</option>
         <option value="approved">已通过</option>
+        <option value="deleted">已删除</option>
+        <option value="pending">待审核</option>
         <option value="rejected">已拒绝</option>
         <option value="all">全部</option>
       </select>
     </div>
-    
+
     <div class="comment-list" id="commentList">
       <div class="loading">加载中...</div>
     </div>
@@ -160,18 +170,18 @@
   <script>
     const API_BASE = window.location.origin + '/api';
     let token = localStorage.getItem('admin_token') || '';
-    
+
     if (!token) {
       location.href = 'index.html';
     }
-    
+
     loadComments();
-    
+
     async function loadComments() {
       const status = document.getElementById('statusFilter').value;
       const listEl = document.getElementById('commentList');
       listEl.innerHTML = '<div class="loading">加载中...</div>';
-      
+
       try {
         const res = await fetch(`${API_BASE}/admin/comments/list?token=${token}&status=${status}`);
         if (res.status === 401) {
@@ -184,19 +194,19 @@
           return;
         }
         const data = await res.json();
-        
+
         if (!data.data?.length) {
           listEl.innerHTML = '<div class="empty">暂无评论</div>';
           return;
         }
-        
+
         listEl.innerHTML = data.data.map(c => `
-          <div class="comment-card">
+          <div class="comment-card${c.status === 'deleted' ? ' is-deleted' : ''}">
             <div class="comment-header">
               <div class="comment-user">
                 <img src="${c.avatarUrl || 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'}" alt="">
                 <div>
-                  <div class="name">${c.nickName || '用户'}</div>
+                  <div class="name">${escapeHtml(c.nickName || '用户')}</div>
                   <div class="time">${new Date(c.created_at).toLocaleString()}</div>
                 </div>
               </div>
@@ -204,10 +214,13 @@
             </div>
             <div class="comment-content">${escapeHtml(c.content)}</div>
             <div class="comment-recipe">菜谱：<a href="#">ID: ${c.recipeId}</a></div>
-            ${c.status === 'pending' ? `
+            ${c.status !== 'pending' ? `
               <div class="comment-actions">
-                <button class="btn btn-primary" onclick="approveComment(${c.id})">通过</button>
-                <button class="btn btn-danger" onclick="rejectComment(${c.id})">拒绝</button>
+                ${c.status === 'deleted' ? `
+                  <button class="btn btn-primary" onclick="restoreComment(${c.id})">还原</button>
+                ` : `
+                  <button class="btn btn-danger" onclick="deleteComment(${c.id})">删除</button>
+                `}
               </div>
             ` : ''}
           </div>
@@ -216,48 +229,43 @@
         listEl.innerHTML = '<div class="empty">网络错误</div>';
       }
     }
-    
-    async function approveComment(id) {
-      if (!confirm('确定通过该评论？')) return;
-      await updateStatus(id, 'approved');
-    }
-    
-    async function rejectComment(id) {
-      if (!confirm('确定拒绝该评论？')) return;
-      await updateStatus(id, 'rejected');
-    }
-    
-    async function updateStatus(id, status) {
+
+    async function deleteComment(id) {
+      if (!confirm('确定删除该评论？删除后用户端将不可见')) return;
       try {
-        const res = await fetch(`${API_BASE}/admin/comments/${status}`, {
+        const res = await fetch(`${API_BASE}/admin/comments/delete`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token, commentId: id })
         });
-        if (res.status === 401) {
-          localStorage.removeItem('admin_token');
-          location.href = 'index.html';
-          return;
-        }
+        if (res.status === 401) { localStorage.removeItem('admin_token'); location.href = 'index.html'; return; }
         const data = await res.json();
-        if (data.success) {
-          loadComments();
-        } else {
-          alert(data.error || '操作失败');
-        }
-      } catch (e) {
-        alert('网络错误');
-      }
+        if (data.success) { loadComments(); } else { alert(data.error || '操作失败'); }
+      } catch (e) { alert('网络错误'); }
     }
-    
+
+    async function restoreComment(id) {
+      if (!confirm('确定还原该评论？')) return;
+      try {
+        const res = await fetch(`${API_BASE}/admin/comments/restore`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, commentId: id })
+        });
+        if (res.status === 401) { localStorage.removeItem('admin_token'); location.href = 'index.html'; return; }
+        const data = await res.json();
+        if (data.success) { loadComments(); } else { alert(data.error || '操作失败'); }
+      } catch (e) { alert('网络错误'); }
+    }
+
     function getStatusText(status) {
-      return { pending: '待审核', approved: '已通过', rejected: '已拒绝' }[status] || status;
+      return { pending: '待审核', approved: '已通过', rejected: '已拒绝', deleted: '已删除' }[status] || status;
     }
-    
+
     function escapeHtml(str) {
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
-    
+
     function logout() {
       localStorage.removeItem('admin_token');
       location.href = 'index.html';

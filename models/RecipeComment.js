@@ -25,7 +25,7 @@ const RecipeComment = sequelize.define('RecipeComment', {
     comment: '回复的评论ID',
   },
   status: {
-    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+    type: DataTypes.ENUM('pending', 'approved', 'rejected', 'deleted'),
     defaultValue: 'pending',
     comment: '审核状态',
   },

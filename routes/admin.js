@@ -170,45 +170,53 @@ router.get('/comments/list', checkAuth, async (req, res) => {
   }
 });
 
-// POST /api/admin/comments/approve
-router.post('/comments/approve', checkAuth, async (req, res) => {
+// POST /api/admin/comments/delete
+router.post('/comments/delete', checkAuth, async (req, res) => {
   try {
     const { commentId } = req.body;
-    
+
     const comment = await RecipeComment.findByPk(commentId);
     if (!comment) {
       return res.status(404).json({ error: '评论不存在' });
     }
-    
-    comment.status = 'approved';
-    await comment.save();
-    
-    // 增加评论计数
-    await Recipe.increment('commentCount', { by: 1, where: { id: comment.recipeId } });
-    
-    res.json({ success: true, message: '评论已通过' });
+
+    if (comment.status !== 'deleted') {
+      const prevStatus = comment.status;
+      comment.status = 'deleted';
+      await comment.save();
+      // 已通过的被删除，扣减评论计数
+      if (prevStatus === 'approved') {
+        await Recipe.decrement('commentCount', { by: 1, where: { id: comment.recipeId } });
+      }
+    }
+
+    res.json({ success: true, message: '评论已删除' });
   } catch (err) {
-    console.error('[/api/admin/comments/approve]', err.message);
+    console.error('[/api/admin/comments/delete]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/admin/comments/reject
-router.post('/comments/reject', checkAuth, async (req, res) => {
+// POST /api/admin/comments/restore
+router.post('/comments/restore', checkAuth, async (req, res) => {
   try {
     const { commentId } = req.body;
-    
+
     const comment = await RecipeComment.findByPk(commentId);
     if (!comment) {
       return res.status(404).json({ error: '评论不存在' });
     }
-    
-    comment.status = 'rejected';
-    await comment.save();
-    
-    res.json({ success: true, message: '评论已拒绝' });
+
+    if (comment.status === 'deleted') {
+      comment.status = 'approved';
+      await comment.save();
+      // 恢复时增加评论计数
+      await Recipe.increment('commentCount', { by: 1, where: { id: comment.recipeId } });
+    }
+
+    res.json({ success: true, message: '评论已还原' });
   } catch (err) {
-    console.error('[/api/admin/comments/reject]', err.message);
+    console.error('[/api/admin/comments/restore]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
