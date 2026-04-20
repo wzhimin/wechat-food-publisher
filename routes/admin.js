@@ -552,84 +552,57 @@ router.get('/users/list', checkAuth, async (req, res) => {
   }
 });
 
-// ========== 非菜谱清理 ==========
-
-// 非菜谱关键词（纯食材、小贴士、文章等）
-const NON_RECIPE_KEYWORDS = [
-  '小贴士', '贴士', '技巧', '方法', '指南', '攻略', '大全', '百科',
-  '香椿', '春笋', '韭菜', '菠菜', '芹菜', '荠菜', '芦笋', '莴笋',
-  '功效', '作用', '好处', '营养', '价值', '禁忌', '注意',
-  '祛湿', '养生', '保健', '食疗', '偏方',
-];
-
 // GET /api/admin/recipes/non-dishes
-// 列出可能是非菜谱的内容
+// 列出可能是非菜谱的内容（无食材且无步骤）
 router.get('/recipes/non-dishes', checkAuth, async (req, res) => {
   try {
     const { page = 1, pageSize = 50 } = req.query;
     
-    // 构建查询条件
-    const orConditions = NON_RECIPE_KEYWORDS.map(kw => ({
-      title: { [Op.like]: `%${kw}%` }
-    }));
-    
-    const where = {
-      [Op.or]: orConditions,
-    };
-    
-    const offset = (parseInt(page) - 1) * parseInt(pageSize);
-    const { count, rows: recipes } = await Recipe.findAndCountAll({
-      where,
+    // 先获取所有菜谱，然后在内存中过滤
+    // 因为 ingredients 和 steps 是 JSON 字段，SQL 难以直接判断
+    const allRecipes = await Recipe.findAll({
       attributes: ['id', 'title', 'cover', 'ingredients', 'steps', 'created_at'],
       order: [['created_at', 'DESC']],
-      limit: parseInt(pageSize),
-      offset,
     });
     
-    // 分析每条记录
-    const data = recipes.map(r => {
-      const reasons = [];
-      const title = r.title || '';
-      
-      // 检查关键词
-      for (const kw of NON_RECIPE_KEYWORDS) {
-        if (title.includes(kw)) {
-          reasons.push(`标题含"${kw}"`);
-        }
-      }
-      
-      // 检查是否有步骤
-      let steps = [];
-      try {
-        steps = JSON.parse(r.steps || '[]');
-      } catch (e) {}
-      if (!steps.length) {
-        reasons.push('无步骤');
-      }
-      
-      // 检查是否有食材
+    // 过滤出无食材且无步骤的
+    const nonDishes = allRecipes.filter(r => {
       let ingredients = [];
+      let steps = [];
       try {
         ingredients = JSON.parse(r.ingredients || '[]');
       } catch (e) {}
-      if (!ingredients.length) {
-        reasons.push('无食材');
-      }
+      try {
+        steps = JSON.parse(r.steps || '[]');
+      } catch (e) {}
       
-      return {
-        id: r.id,
-        title: r.title,
-        cover: r.cover,
-        hasSteps: steps.length > 0,
-        hasIngredients: ingredients.length > 0,
-        stepsCount: steps.length,
-        ingredientsCount: ingredients.length,
-        reasons,
-        created_at: r.created_at,
-      };
+      // 无食材且无步骤 = 非菜谱
+      return (!ingredients || ingredients.length === 0) && 
+             (!steps || steps.length === 0);
     });
     
-    res.json({ success: true, data, total: count, keywords: NON_RECIPE_KEYWORDS });
+    const totalCount = nonDishes.length;
+    const offset = (parseInt(page) - 1) * parseInt(pageSize);
+    const pagedData = nonDishes.slice(offset, offset + parseInt(pageSize));
+    
+    const data = pagedData.map(r => ({
+      id: r.id,
+      title: r.title,
+      cover: r.cover,
+      hasSteps: false,
+      hasIngredients: false,
+      stepsCount: 0,
+      ingredientsCount: 0,
+      reasons: ['无食材', '无步骤'],
+      created_at: r.created_at,
+    }));
+    
+    res.json({ 
+      success: true, 
+      data, 
+      total: totalCount, 
+      rule: '无食材且无步骤' 
+    });
   } catch (err) {
     console.error('[/api/admin/recipes/non-dishes]', err.message);
     res.status(500).json({ error: err.message });
