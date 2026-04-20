@@ -39,7 +39,38 @@ async function init() {
     }
   } catch (e) { console.error('[清理] 索引失败:', e.message); }
 
-  // 第二步：同步 Counter 表
+  // 第二步：迁移 feedback → feedbacks（历史命名错误）
+  // 如果旧 feedback 表存在，rename 为 feedbacks；不存在则直接创建 feedbacks 表
+  try {
+    const [oldRows] = await sequelize.query(`SHOW TABLES LIKE 'feedback'`);
+    const [newRows] = await sequelize.query(`SHOW TABLES LIKE 'feedbacks'`);
+    if (oldRows.length > 0 && newRows.length === 0) {
+      await sequelize.query('RENAME TABLE feedback TO feedbacks');
+      console.log('[迁移] feedback → feedbacks 完成');
+    } else if (newRows.length === 0) {
+      // feedbacks 表从未存在，直接用 SQL 创建
+      await sequelize.query(`
+        CREATE TABLE feedbacks (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          openid VARCHAR(64) DEFAULT NULL COMMENT '用户openid（可选）',
+          type ENUM('bug','suggest','other') DEFAULT 'suggest' COMMENT '反馈类型',
+          content TEXT NOT NULL COMMENT '反馈内容',
+          contact VARCHAR(128) DEFAULT '' COMMENT '联系方式',
+          status ENUM('pending','replied','resolved') DEFAULT 'pending' COMMENT '处理状态',
+          adminReply TEXT COMMENT '管理员回复内容',
+          handledBy VARCHAR(64) DEFAULT NULL COMMENT '处理人',
+          handledAt DATETIME DEFAULT NULL COMMENT '处理时间',
+          created_at DATETIME DEFAULT NULL,
+          updated_at DATETIME DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户反馈'
+      `);
+      console.log('[迁移] feedbacks 表创建完成');
+    } else {
+      console.log('[迁移] feedbacks 表已存在，跳过');
+    }
+  } catch (e) { console.error('[迁移] feedbacks 出错:', e.message); }
+
+  // 第三步：同步 Counter 表
   await Counter.sync({ alter: true });
 }
 
