@@ -27,6 +27,19 @@
       background: #34495e;
       border-left-color: #3498db;
     }
+    .sidebar h2 {
+      color: #fff;
+      font-size: 16px;
+      padding: 0 20px 15px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .sidebar .logout {
+      color: #e74c3c;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .sidebar .logout:hover { color: white; }
     .main { margin-left: 240px; padding: 20px; }
     .stat-card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
     .stat-card h3 { margin: 0; font-size: 28px; color: #3498db; }
@@ -35,14 +48,15 @@
 </head>
 <body>
   <div class="sidebar">
-    <a href="index.html">首页</a>
-    <a href="recipes.html">菜谱管理</a>
-    <a href="comments.html">评论管理</a>
-    <a href="feedbacks.html">用户反馈</a>
-    <a href="reports.html" class="active">举报管理</a>
-    <a href="users.html">用户管理</a>
-    <a href="non-dishes.html">非菜谱清理</a>
-    <a href="#" onclick="logout()">退出登录</a>
+    <h2>👔 味可觅后台</h2>
+    <a href="index.html">📊 概览</a>
+    <a href="comments.html">💬 评论管理</a>
+    <a href="recipes.html">📖 菜谱管理</a>
+    <a href="feedbacks.html">📝 用户反馈</a>
+    <a href="users.html">👥 用户管理</a>
+    <a href="non-dishes.html">🗑️ 非菜谱清理</a>
+    <a href="reports.html" class="active">🚫 举报管理</a>
+    <div class="logout" onclick="logout()">退出登录</div>
   </div>
 
   <div class="main">
