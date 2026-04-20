@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>评论审核 - 味可觅后台</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f7fa;
+      min-height: 100vh;
+    }
+    .sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 220px;
+      height: 100vh;
+      background: #2c3e50;
+      color: white;
+      padding: 20px 0;
+    }
+    .sidebar h2 {
+      padding: 0 20px 20px;
+      font-size: 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .sidebar a {
+      display: block;
+      padding: 12px 20px;
+      color: rgba(255,255,255,0.8);
+      text-decoration: none;
+    }
+    .sidebar a:hover, .sidebar a.active {
+      background: rgba(255,255,255,0.1);
+      color: white;
+    }
+    .sidebar .logout {
+      position: absolute;
+      bottom: 20px;
+      width: 100%;
+      padding: 12px 20px;
+      color: rgba(255,255,255,0.6);
+      cursor: pointer;
+    }
+    .sidebar .logout:hover { color: white; }
+    
+    .main-content {
+      margin-left: 220px;
+      padding: 30px;
+    }
+    .page-header { margin-bottom: 20px; }
+    .page-header h1 { font-size: 24px; margin-bottom: 8px; }
+    
+    /* 筛选栏 */
+    .filter-bar {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    .filter-bar select {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+    }
+    
+    /* 列表 */
+    .comment-list { display: flex; flex-direction: column; gap: 12px; }
+    .comment-card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .comment-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .comment-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .comment-user img {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+    }
+    .comment-user .name { font-weight: 500; }
+    .comment-user .time { font-size: 12px; color: #999; }
+    .comment-status {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+    .status-pending { background: #fff3cd; color: #856404; }
+    .status-approved { background: #d4edda; color: #155724; }
+    .status-rejected { background: #f8d7da; color: #721c24; }
+    
+    .comment-content { margin-bottom: 12px; line-height: 1.6; }
+    .comment-recipe { font-size: 13px; color: #666; margin-bottom: 12px; }
+    .comment-recipe a { color: #3498db; }
+    
+    .comment-actions { display: flex; gap: 10px; }
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn-primary { background: #27ae60; color: white; }
+    .btn-danger { background: #e74c3c; color: white; }
+    .btn-secondary { background: #95a5a6; color: white; }
+    .btn:hover { opacity: 0.9; }
+    
+    .empty { text-align: center; padding: 40px; color: #999; }
+    .loading { text-align: center; padding: 40px; }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h2>👔 味可觅后台</h2>
+    <a href="index.html">📊 概览</a>
+    <a href="comments.html" class="active">💬 评论审核</a>
+    <a href="recipes.html">📖 菜谱管理</a>
+    <a href="feedbacks.html">📝 用户反馈</a>
+    <div class="logout" onclick="logout()">退出登录</div>
+  </div>
+  
+  <div class="main-content">
+    <div class="page-header">
+      <h1>💬 评论审核</h1>
+    </div>
+    
+    <div class="filter-bar">
+      <label>状态：</label>
+      <select id="statusFilter" onchange="loadComments()">
+        <option value="pending">待审核</option>
+        <option value="approved">已通过</option>
+        <option value="rejected">已拒绝</option>
+        <option value="all">全部</option>
+      </select>
+    </div>
+    
+    <div class="comment-list" id="commentList">
+      <div class="loading">加载中...</div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin + '/api';
+    let token = localStorage.getItem('admin_token') || '';
+    
+    if (!token) {
+      location.href = 'index.html';
+    }
+    
+    loadComments();
+    
+    async function loadComments() {
+      const status = document.getElementById('statusFilter').value;
+      const listEl = document.getElementById('commentList');
+      listEl.innerHTML = '<div class="loading">加载中...</div>';
+      
+      try {
+        const res = await fetch(`${API_BASE}/admin/comments/list?token=${token}&status=${status}`);
+        if (res.status === 401) {
+          localStorage.removeItem('admin_token');
+          location.href = 'index.html';
+          return;
+        }
+        if (!res.ok) {
+          listEl.innerHTML = '<div class="empty">加载失败，请检查权限</div>';
+          return;
+        }
+        const data = await res.json();
+        
+        if (!data.data?.length) {
+          listEl.innerHTML = '<div class="empty">暂无评论</div>';
+          return;
+        }
+        
+        listEl.innerHTML = data.data.map(c => `
+          <div class="comment-card">
+            <div class="comment-header">
+              <div class="comment-user">
+                <img src="${c.avatarUrl || 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'}" alt="">
+                <div>
+                  <div class="name">${c.nickName || '用户'}</div>
+                  <div class="time">${new Date(c.created_at).toLocaleString()}</div>
+                </div>
+              </div>
+              <span class="comment-status status-${c.status}">${getStatusText(c.status)}</span>
+            </div>
+            <div class="comment-content">${escapeHtml(c.content)}</div>
+            <div class="comment-recipe">菜谱：<a href="#">ID: ${c.recipeId}</a></div>
+            ${c.status === 'pending' ? `
+              <div class="comment-actions">
+                <button class="btn btn-primary" onclick="approveComment(${c.id})">通过</button>
+                <button class="btn btn-danger" onclick="rejectComment(${c.id})">拒绝</button>
+              </div>
+            ` : ''}
+          </div>
+        `).join('');
+      } catch (e) {
+        listEl.innerHTML = '<div class="empty">网络错误</div>';
+      }
+    }
+    
+    async function approveComment(id) {
+      if (!confirm('确定通过该评论？')) return;
+      await updateStatus(id, 'approved');
+    }
+    
+    async function rejectComment(id) {
+      if (!confirm('确定拒绝该评论？')) return;
+      await updateStatus(id, 'rejected');
+    }
+    
+    async function updateStatus(id, status) {
+      try {
+        const res = await fetch(`${API_BASE}/admin/comments/${status}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, commentId: id })
+        });
+        if (res.status === 401) {
+          localStorage.removeItem('admin_token');
+          location.href = 'index.html';
+          return;
+        }
+        const data = await res.json();
+        if (data.success) {
+          loadComments();
+        } else {
+          alert(data.error || '操作失败');
+        }
+      } catch (e) {
+        alert('网络错误');
+      }
+    }
+    
+    function getStatusText(status) {
+      return { pending: '待审核', approved: '已通过', rejected: '已拒绝' }[status] || status;
+    }
+    
+    function escapeHtml(str) {
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    
+    function logout() {
+      localStorage.removeItem('admin_token');
+      location.href = 'index.html';
+    }
+  </script>
+</body>
+</html>

@@ -144,8 +144,18 @@ router.post('/delete', async (req, res) => {
 // Body: { markdown, cover?, articleId?, publishedAt? }
 router.post('/parse', async (req, res) => {
   try {
-    const { markdown, cover, articleId, publishedAt } = req.body;
+    let { markdown, cover, articleId, publishedAt } = req.body;
     if (!markdown) return res.status(400).json({ error: '缺少 markdown' });
+
+    // 如果没有传 cover，尝试从 markdown front matter 中提取
+    if (!cover) {
+      const coverMatch = markdown.match(/^cover:\s*(.+)/m);
+      if (coverMatch) {
+        cover = coverMatch[1].trim();
+        // 去掉可能的引号
+        cover = cover.replace(/^["']|["']$/g, '');
+      }
+    }
 
     const recipes = parseMarkdownRecipes(markdown, { cover, articleId, publishedAt });
     if (recipes.length === 0) return res.status(400).json({ error: '未解析到菜谱，请检查 markdown 格式' });

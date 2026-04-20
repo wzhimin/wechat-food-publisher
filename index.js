@@ -28,6 +28,7 @@ const mealRouter = require('./routes/meal');
 const { parseMarkdownRecipes } = require('./routes/recipe');
 const historyRouter = require('./routes/history');
 const feedbackRouter = require('./routes/feedback');
+const adminRouter = require('./routes/admin');
 const { fillCoversForRecipes } = require('./scripts/fill-recipe-covers');
 const noteRouter = require('./routes/note');
 const likeRouter = require('./routes/like');
@@ -36,6 +37,7 @@ const followRouter = require('./routes/follow');
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));
+app.use(express.static('public'));  // 托管静态文件（后台管理页面）
 
 // ========== 配置区 ==========
 const APP_ID = process.env.WECHAT_APP_ID || 'wx85ae98c22a4d22e1';
@@ -611,6 +613,7 @@ app.use('/api/collect', collectionRouter);
 app.use('/api/meal', mealRouter);
 app.use('/api/history', historyRouter);
 app.use('/api/feedback', feedbackRouter);
+app.use('/api/admin', adminRouter);
 app.use('/api/note', noteRouter);
 app.use('/api/like', likeRouter);
 app.use('/api/comment', commentRouter);

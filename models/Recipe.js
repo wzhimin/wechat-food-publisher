@@ -74,11 +74,25 @@ const Recipe = sequelize.define('Recipe', {
     defaultValue: 0,
     comment: '浏览数',
   },
+  status: {
+    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+    defaultValue: 'approved',
+    comment: '审核状态',
+  },
+  isFeatured: {
+    type: DataTypes.TINYINT(1),
+    defaultValue: 0,
+    comment: '是否精选',
+  },
 }, {
   tableName: 'recipes',
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',
+  indexes: [
+    { fields: ['status'], name: 'idx_status' },
+    { fields: ['is_featured'], name: 'idx_featured' },
+  ],
 });
 
 module.exports = Recipe;

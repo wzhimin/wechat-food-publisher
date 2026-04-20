@@ -27,11 +27,26 @@ const Feedback = sequelize.define('Feedback', {
     defaultValue: 'pending',
     comment: '处理状态',
   },
+  adminReply: {
+    type: DataTypes.TEXT,
+    comment: '管理员回复内容',
+  },
+  handledBy: {
+    type: DataTypes.STRING(64),
+    comment: '处理人',
+  },
+  handledAt: {
+    type: DataTypes.DATE,
+    comment: '处理时间',
+  },
 }, {
   tableName: 'feedback',
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',
+  indexes: [
+    { fields: ['status'], name: 'idx_status' },
+  ],
 });
 
 module.exports = Feedback;

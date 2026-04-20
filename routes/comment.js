@@ -47,8 +47,9 @@ router.get('/list', async (req, res) => {
     const { recipeId } = req.query;
     if (!recipeId) return res.status(400).json({ error: '缺少 recipeId' });
 
+    // 只显示已通过的评论
     const comments = await RecipeComment.findAll({
-      where: { recipeId, replyTo: null },
+      where: { recipeId, replyTo: null, status: 'approved' },
       order: [['created_at', 'DESC']],
     });
 
@@ -60,7 +61,7 @@ router.get('/list', async (req, res) => {
 
     const commentIds = comments.map(c => c.id);
     const replies = commentIds.length
-      ? await RecipeComment.findAll({ where: { replyTo: commentIds }, order: [['created_at', 'ASC']] })
+      ? await RecipeComment.findAll({ where: { replyTo: commentIds, status: 'approved' }, order: [['created_at', 'ASC']] })
       : [];
 
     const replyMap = {};
@@ -113,9 +114,11 @@ router.post('/add', async (req, res) => {
       recipeId,
       content: content.trim(),
       replyTo: replyTo || null,
+      status: 'pending',  // 新评论默认为待审核
     });
 
-    await Recipe.increment('commentCount', { by: 1, where: { id: recipeId } });
+    // 评论数先不增加，等审核通过后再增加
+    // await Recipe.increment('commentCount', { by: 1, where: { id: recipeId } });
 
     const user = await User.findOne({ where: { openid }, attributes: ['openid', 'nickName', 'avatarUrl'] });
 

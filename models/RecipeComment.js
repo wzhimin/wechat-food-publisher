@@ -24,6 +24,11 @@ const RecipeComment = sequelize.define('RecipeComment', {
 
     comment: '回复的评论ID',
   },
+  status: {
+    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+    defaultValue: 'pending',
+    comment: '审核状态',
+  },
 }, {
   tableName: 'recipe_comments',
   timestamps: true,
@@ -31,6 +36,7 @@ const RecipeComment = sequelize.define('RecipeComment', {
   updatedAt: false,
   indexes: [
     { fields: ['recipe_id', 'created_at'], name: 'idx_recipe_time' },
+    { fields: ['status'], name: 'idx_status' },
   ],
 });
 
