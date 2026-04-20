@@ -473,7 +473,7 @@ router.get('/users/stats', checkAuth, async (req, res) => {
     ] = await Promise.all([
       User.count(),
       User.count({ where: { created_at: { [Op.gte]: today } } }),
-      User.count({ where: { last_login: { [Op.gte]: sevenDaysAgo } } }),
+      User.count({ where: { updated_at: { [Op.gte]: sevenDaysAgo } } }),
       dbSeq.query(
         'SELECT COUNT(DISTINCT openid) as count FROM recipes',
         { type: dbSeq.QueryTypes.SELECT }
@@ -501,7 +501,7 @@ router.get('/users/list', checkAuth, async (req, res) => {
     const { page = 1, pageSize = 50 } = req.query;
     
     const { count, rows: users } = await User.findAndCountAll({
-      attributes: ['openid', 'nickName', 'avatarUrl', 'created_at', 'last_login'],
+      attributes: ['openid', 'nickName', 'avatarUrl', 'created_at', 'updated_at'],
       order: [['created_at', 'DESC']],
       limit: parseInt(pageSize),
       offset: (parseInt(page) - 1) * parseInt(pageSize),

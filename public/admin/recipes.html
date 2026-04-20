@@ -291,8 +291,15 @@
         <input type="text" id="editTitle">
       </div>
       <div class="form-group">
-        <label>封面图URL</label>
+        <label>封面图</label>
         <input type="text" id="editCover" placeholder="https://...">
+        <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+          <label style="display:inline-block;padding:6px 14px;background:#07c160;color:#fff;border-radius:6px;cursor:pointer;font-size:13px;">
+            📷 上传图片
+            <input type="file" accept="image/*" id="editCoverFile" style="display:none" onchange="handleCoverUpload(this)">
+          </label>
+          <span id="uploadProgress" style="font-size:12px;color:#999;"></span>
+        </div>
         <div style="margin-top:8px;">
           <img id="editCoverPreview" src="" style="max-width:200px;max-height:150px;border-radius:6px;display:none;">
         </div>
@@ -562,6 +569,39 @@
       document.getElementById('editModal').classList.remove('show');
     }
     
+    async function handleCoverUpload(input) {
+      const file = input.files[0];
+      if (!file) return;
+      if (file.size > 5 * 1024 * 1024) { alert('图片不能超过5MB'); return; }
+      const progress = document.getElementById('uploadProgress');
+      progress.textContent = '上传中...';
+      try {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          const base64 = e.target.result.split(',')[1];
+          const res = await fetch(`${API_BASE}/upload-image`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageBase64: base64 })
+          });
+          const data = await res.json();
+          if (data.success && data.url) {
+            document.getElementById('editCover').value = data.url;
+            const preview = document.getElementById('editCoverPreview');
+            preview.src = data.url;
+            preview.style.display = 'block';
+            progress.textContent = '✅ 上传成功';
+            setTimeout(() => progress.textContent = '', 2000);
+          } else {
+            progress.textContent = '❌ ' + (data.error || '上传失败');
+          }
+        };
+        reader.readAsDataURL(file);
+      } catch (e) {
+        progress.textContent = '❌ 上传失败';
+      }
+    }
+
     async function saveRecipe() {
       const id = document.getElementById('editRecipeId').value;
       const body = {
