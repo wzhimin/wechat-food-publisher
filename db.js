@@ -95,6 +95,8 @@ async function init() {
 
   // 第四步：修复旧评论状态（一次性迁移，之后可删除）
   try {
+    // 先扩大 status 列以支持 ENUM 值
+    await sequelize.query("ALTER TABLE recipe_comments MODIFY COLUMN status VARCHAR(20) DEFAULT 'approved'");
     const [r1] = await sequelize.query("UPDATE recipe_comments SET status='approved' WHERE status IS NULL");
     if (r1.affectedRows > 0) console.log(`[迁移] recipe_comments status NULL → approved (${r1.affectedRows} 条)`);
     const [r2] = await sequelize.query("UPDATE recipe_comments SET status='approved' WHERE status='pending'");
