@@ -66,6 +66,57 @@ function httpPost(path, body) {
   });
 }
 
+// ========== 图片下载（buffer） ==========
+function downloadImage(url) {
+  return new Promise((resolve, reject) => {
+    const protocol = url.startsWith('https') ? https : http;
+    const req = protocol.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, res => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        downloadImage(res.headers.location).then(resolve).catch(reject);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`下载失败 HTTP ${res.statusCode}`));
+        return;
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    });
+    req.on('error', reject);
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('下载超时')); });
+  });
+}
+
+// ========== 上传图片到微信永久素材 ==========
+async function uploadImageToWeChat(buffer) {
+  const b64 = buffer.toString('base64');
+  const data = JSON.stringify({ imageBase64: b64 });
+  const url = new URL('/api/upload-image', API_BASE);
+  return new Promise((resolve, reject) => {
+    const opts = {
+      hostname: url.hostname,
+      path: url.pathname,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
+    };
+    const req = https.request(opts, res => {
+      let body = '';
+      res.on('data', c => body += c);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(body);
+          if (json.success && json.url) resolve(json.url);
+          else reject(new Error(json.error || '上传失败'));
+        } catch (e) { reject(new Error(body)); }
+      });
+    });
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
+
 // ========== 通义万相 AI 图片生成 ==========
 async function generateWithWanxiang(title) {
   const prompt = `一张高清美食照片，${title}，家常中餐，色泽鲜亮，热气腾腾，自然光，写实风格，细节丰富`;
@@ -324,25 +375,41 @@ async function searchPixabay(query) {
 }
 
 // 智能搜索：AI生成 → Pixabay逐级降级
+// 通用的"下载→上传微信"步骤，AI/Pixabay 共用
+async function downloadAndUpload(imageUrl) {
+  try {
+    const buffer = await downloadImage(imageUrl);
+    const wechatUrl = await uploadImageToWeChat(buffer);
+    console.log(`    ☁️ 已上传微信素材: ${wechatUrl.slice(0, 50)}...`);
+    return wechatUrl;
+  } catch (e) {
+    // 上传失败，保留原链接（降级兜底）
+    console.log(`    ⚠️ 上传微信失败（${e.message}），保留原链接`);
+    return imageUrl;
+  }
+}
+
 async function findCoverImage(title, useAI = true) {
-  // 1. 先尝试 AI 生成
+  // 1. 通义万相 AI 生成
   if (useAI) {
     console.log(`    🤖 尝试 AI 生成...`);
     const aiResult = await generateWithWanxiang(title);
     if (aiResult) {
-      console.log(`    ✅ AI 生成成功`);
-      return aiResult;
+      console.log(`    ✅ AI 生成成功，下载并上传到微信永久素材...`);
+      const finalUrl = await downloadAndUpload(aiResult.url);
+      return { url: finalUrl, source: '通义万相→微信', photographer: 'AI生成' };
     }
     console.log(`    ⚠️  AI 生成失败，降级到 Pixabay`);
   }
-  
+
   // 2. Pixabay 搜索
   const keywords = generateKeywords(title);
   for (const { kw, label } of keywords) {
     const result = await searchPixabay(kw);
     if (result) {
-      console.log(`    🖼️  ${label} → 找到`);
-      return result;
+      console.log(`    🖼️  ${label} → 找到，下载并上传到微信永久素材...`);
+      const finalUrl = await downloadAndUpload(result.url);
+      return { url: finalUrl, source: 'Pixabay→微信', photographer: result.photographer || '' };
     }
     await sleep(300);
   }

@@ -808,7 +808,7 @@ router.get('/reports/stats', checkAuth, async (req, res) => {
 });
 
 // GET /api/admin/articles/:id/recipes
-// 查询选题记录关联的菜谱列表（从本地 md 文件解析）
+// 查询选题记录关联的菜谱列表（从数据库查询）
 router.get('/articles/:id/recipes', checkAuth, async (req, res) => {
   const { id } = req.params;
 
@@ -818,75 +818,29 @@ router.get('/articles/:id/recipes', checkAuth, async (req, res) => {
       return res.status(404).json({ error: '记录不存在' });
     }
 
-    const articlesDir = path.resolve(process.env.HOME,
-      'Desktop/wzmmaven/weikou/articles');
+    // article.draft_id = PublishedArticle.draft_id
+    // Recipe.articleId = 同 draft_id，两边通过 articleId 关联
+    const recipes = await Recipe.findAll({
+      where: { articleId: article.draft_id },
+      order: [['createdAt', 'ASC']],
+    });
 
-    // 候选文件：md5 匹配优先，其次标题模糊匹配
-    let targetFile = null;
-    const files = fs.readdirSync(articlesDir).filter(f =>
-      f.endsWith('.md') &&
-      !f.includes('_cover') &&
-      !f.includes('版权记录') &&
-      !f.includes('SKILL') &&
-      !f.includes('AI配图')
-    );
-
-    // 1. md5 精确匹配（发布时计算过）
-    if (article.article_md5) {
-      for (const f of files) {
-        const content = fs.readFileSync(path.join(articlesDir, f), 'utf-8');
-        const md5 = crypto.createHash('md5').update(content).digest('hex');
-        if (md5 === article.article_md5) {
-          targetFile = f;
-          break;
-        }
-      }
-    }
-
-    // 2. 标题模糊匹配兜底
-    if (!targetFile) {
-      const normTitle = (article.title || '').replace(/[🔥😱😂💕\s]/g, '').toLowerCase();
-      for (const f of files) {
-        const fNorm = f.replace(/^\d{4}-\d{2}-\d{2}_|\.md$/g, '')
-          .replace(/[🔥😱😂💕\s]/g, '').toLowerCase();
-        if (fNorm.includes(normTitle.slice(0, 20))) {
-          targetFile = f;
-          break;
-        }
-      }
-    }
-
-    if (!targetFile) {
-      return res.json({ success: true, recipes: [], message: '未找到对应本地文件' });
-    }
-
-    const content = fs.readFileSync(path.join(articlesDir, targetFile), 'utf-8');
-
-    // 解析菜谱：## 💕 N. 菜名  ... ## 💕 或 ---
-    const recipes = [];
-    const recipeBlocks = content.split(/^## 💕\s*\d+\.\s*/m).filter(Boolean);
-    for (const block of recipeBlocks) {
-      const lines = block.split('\n');
-      const titleLine = lines.find(l => l.trim());
-      if (!titleLine) continue;
-
-      // 去掉 ## 标题标记
-      const title = titleLine.replace(/^#+\s*/, '').trim();
-      if (!title || title.length > 60) continue;
-
-      // 提取食材行
-      const ingredientsLine = lines.find(l => l.startsWith('**食材：**'));
-      const ingredients = ingredientsLine
-        ? ingredientsLine.replace('**食材：**', '').split(/[、，,]/).map(s => s.trim()).filter(Boolean)
-        : [];
-
-      // 提取做法步数
-      const steps = lines.filter(l => /^\d+\./.test(l.trim())).length;
-
-      recipes.push({ title, ingredients, steps });
-    }
-
-    res.json({ success: true, recipes, filename: targetFile });
+    res.json({
+      success: true,
+      recipes: recipes.map(r => ({
+        id: r.id,
+        title: r.title,
+        cover: r.cover,
+        tags: r.tags,
+        difficulty: r.difficulty,
+        duration: r.duration,
+        status: r.status,
+        isFeatured: r.isFeatured,
+        likeCount: r.likeCount,
+        commentCount: r.commentCount,
+      })),
+      filename: null,
+    });
   } catch (err) {
     console.error('[/api/admin/articles/:id/recipes]', err.message);
     res.status(500).json({ error: err.message });

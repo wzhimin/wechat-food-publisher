@@ -97,6 +97,9 @@ router.get('/list', async (req, res) => {
       // 有 season 时精确匹配，空串则查所有
       where.season = season;
     }
+    if (req.query.articleId) {
+      where.articleId = req.query.articleId;
+    }
 
     // 排序
     let order;
