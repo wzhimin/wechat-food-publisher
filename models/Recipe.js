@@ -101,7 +101,7 @@ const Recipe = sequelize.define('Recipe', {
     {
       name: 'recipe_unique_title_article',
       unique: true,
-      fields: ['title', 'article_id'],
+      fields: ['title', 'articleId'],
     },
   ],
 });
