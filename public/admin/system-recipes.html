@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>菜谱管理 - 味口后台</title>
+  <title>系统菜谱 - 味口后台</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -222,7 +222,8 @@
     <h2>👔 味口后台</h2>
     <a href="index.html">📊 概览</a>
     <a href="comments.html">💬 评论管理</a>
-    <a href="recipes.html" class="active">📖 菜谱管理</a>
+    <a href="recipes.html">📖 菜谱管理</a>
+    <a href="system-recipes.html" class="active">🖥️ 系统菜谱</a>
     <a href="feedbacks.html">📝 用户反馈</a>
     <a href="users.html">👥 用户管理</a>
     <a href="non-dishes.html">🗑️ 非菜谱清理</a>
@@ -233,7 +234,7 @@
   
   <div class="main-content">
     <div class="page-header">
-      <h1>📖 菜谱管理</h1>
+      <h1>🖥️ 系统菜谱</h1>
     </div>
     
     <div class="stats-row" id="statsRow">
@@ -241,26 +242,8 @@
     </div>
     
     <div class="filter-bar">
-      <label>状态：</label>
-      <select id="statusFilter" onchange="changeFilter()">
-        <option value="approved">已发布</option>
-        <option value="pending">待审核</option>
-        <option value="rejected">已拒绝</option>
-        <option value="all">全部</option>
-      </select>
-      <label>来源：</label>
-      <select id="sourceFilter" onchange="changeFilter()">
-        <option value="all">全部</option>
-        <option value="system">系统导入</option>
-        <option value="user">用户发布</option>
-      </select>
-      <label>精选：</label>
-      <select id="featuredFilter" onchange="changeFilter()">
-        <option value="all">全部</option>
-        <option value="1">已精选</option>
-        <option value="0">未精选</option>
-      </select>
-      <input type="text" id="searchInput" class="search-box" placeholder="搜索菜谱标题..." onkeyup="if(event.key==='Enter'){currentPage=1;loadRecipes()}">
+      <span style="color:#888;font-size:13px">系统导入的菜谱（来自本地 md 文件）</span>
+      <input type="text" id="searchInput" class="search-box" placeholder="搜索菜谱标题..." onkeyup="if(event.key==='Enter'){currentPage=1;loadRecipes()}" style="margin-left:auto">
       <button class="btn btn-primary" onclick="currentPage=1;loadRecipes()">搜索</button>
     </div>
     
@@ -271,7 +254,7 @@
             <tr>
               <th>封面</th>
               <th>标题</th>
-              <th>作者</th>
+              <th>发布者</th>
               <th>状态</th>
               <th>收藏/点赞</th>
               <th>发布时间</th>
@@ -383,17 +366,12 @@
     }
     
     async function loadRecipes() {
-      const status = document.getElementById('statusFilter').value;
-      const source = document.getElementById('sourceFilter').value;
-      const featured = document.getElementById('featuredFilter').value;
       const search = document.getElementById('searchInput').value.trim();
       const listEl = document.getElementById('recipeList');
       listEl.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
       
       try {
-        let url = `${API_BASE}/admin/recipes/list?token=${token}&status=${status}&page=${currentPage}&pageSize=${pageSize}`;
-        if (source !== 'all') url += `&source=${source}`;
-        if (featured !== 'all') url += `&isFeatured=${featured}`;
+        let url = `${API_BASE}/admin/recipes/list?token=${token}&status=all&source=system&page=${currentPage}&pageSize=${pageSize}`;
         if (search) url += `&search=${encodeURIComponent(search)}`;
         
         const res = await fetch(url);
@@ -414,7 +392,7 @@
         `;
         
         if (!allRecipes.length) {
-          listEl.innerHTML = '<tr><td colspan="7" class="empty">暂无菜谱</td></tr>';
+          listEl.innerHTML = '<tr><td colspan="7" class="empty">暂无系统菜谱</td></tr>';
           renderPagination();
           return;
         }
@@ -423,9 +401,7 @@
           <tr>
             <td><img class="recipe-cover" src="${getCoverUrl(r.cover)}" alt="" onerror="this.src='https://via.placeholder.com/60?text=No'"></td>
             <td class="recipe-title" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</td>
-            <td>${r.authorOpenid === 'system' 
-              ? '<span style="background:#e9ecef;color:#6c757d;padding:2px 8px;border-radius:10px;font-size:11px">系统导入</span>' 
-              : '<span style="color:#333">' + (r.nickName || '-') + '</span>'}</td>
+            <td>系统导入</td>
             <td>
               <span class="status-badge status-${r.status}">${getStatusText(r.status)}</span>
               ${r.is_featured ? '<span class="status-badge featured">精选</span>' : ''}

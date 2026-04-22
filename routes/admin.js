@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const path = require('path');
 const { Op } = require('sequelize');
 const { sequelize: dbSeq } = require('../db');
 const AdminToken = require('../models/AdminToken');
@@ -256,10 +257,13 @@ router.post('/comments/reject', checkAuth, async (req, res) => {
 // GET /api/admin/recipes/list
 router.get('/recipes/list', checkAuth, async (req, res) => {
   try {
-    const { status = 'approved', isFeatured, search, page = 1, pageSize = 20 } = req.query;
+    const { status = 'approved', isFeatured, search, page = 1, pageSize = 20, source } = req.query;
     const where = {};
     if (status !== 'all') where.status = status;
     if (isFeatured !== undefined) where.is_featured = isFeatured === '1' || isFeatured === 'true';
+    // 来源筛选：system = 系统导入，user = 用户发布
+    if (source === 'system') where.authorOpenid = 'system';
+    else if (source === 'user') where.authorOpenid = { [Op.ne]: 'system' };
     if (search && search.trim()) {
       where[Op.or] = [
         { title: { [Op.like]: `%${search.trim()}%` } },
