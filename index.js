@@ -392,6 +392,45 @@ app.post('/api/draft', async (req, res) => {
   }
 });
 
+// 保存封面图到本地（不上传微信素材，仅供小程序展示）
+// POST /api/upload-cover
+// Body: { imageBase64 }
+// 返回: { success: true, url: 'https://xxx.sh.run.tcloudbase.com/covers/xxx.jpg' }
+app.post('/api/upload-cover', async (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ error: '缺少 imageBase64' });
+    }
+
+    // 创建目录
+    const coverDir = path.join(__dirname, 'public', 'covers');
+    if (!fs.existsSync(coverDir)) {
+      fs.mkdirSync(coverDir, { recursive: true });
+    }
+
+    const filename = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+    const filepath = path.join(coverDir, filename);
+    const imageBuffer = Buffer.from(imageBase64, 'base64');
+    fs.writeFileSync(filepath, imageBuffer);
+
+    // 返回服务器可访问 URL
+    const imageUrl = `/covers/${filename}`;
+
+    res.json({
+      success: true,
+      url: imageUrl,
+      message: '封面保存成功'
+    });
+  } catch (err) {
+    console.error('封面保存失败:', err.message);
+    res.status(500).json({
+      error: '封面保存失败',
+      detail: err.message,
+    });
+  }
+});
+
 // 上传图片并返回URL（用于文章内容中插入图片）
 // POST /api/upload-image
 // Body: { imageBase64 }

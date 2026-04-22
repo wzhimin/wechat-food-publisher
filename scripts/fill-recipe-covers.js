@@ -88,11 +88,11 @@ function downloadImage(url) {
   });
 }
 
-// ========== 上传图片到微信永久素材 ==========
-async function uploadImageToWeChat(buffer) {
+// ========== 上传封面图到服务器本地（不上传微信素材） ==========
+async function uploadCoverToServer(buffer) {
   const b64 = buffer.toString('base64');
   const data = JSON.stringify({ imageBase64: b64 });
-  const url = new URL('/api/upload-image', API_BASE);
+  const url = new URL('/api/upload-cover', API_BASE);
   return new Promise((resolve, reject) => {
     const opts = {
       hostname: url.hostname,
@@ -375,16 +375,16 @@ async function searchPixabay(query) {
 }
 
 // 智能搜索：AI生成 → Pixabay逐级降级
-// 通用的"下载→上传微信"步骤，AI/Pixabay 共用
+// 通用的"下载→上传服务器本地"步骤，AI/Pixabay 共用
 async function downloadAndUpload(imageUrl) {
   try {
     const buffer = await downloadImage(imageUrl);
-    const wechatUrl = await uploadImageToWeChat(buffer);
-    console.log(`    ☁️ 已上传微信素材: ${wechatUrl.slice(0, 50)}...`);
-    return wechatUrl;
+    const coverUrl = await uploadCoverToServer(buffer);
+    console.log(`    ☁️ 已保存到服务器: ${coverUrl}`);
+    return coverUrl;
   } catch (e) {
     // 上传失败，保留原链接（降级兜底）
-    console.log(`    ⚠️ 上传微信失败（${e.message}），保留原链接`);
+    console.log(`    ⚠️ 上传服务器失败（${e.message}），保留原链接`);
     return imageUrl;
   }
 }
@@ -395,9 +395,9 @@ async function findCoverImage(title, useAI = true) {
     console.log(`    🤖 尝试 AI 生成...`);
     const aiResult = await generateWithWanxiang(title);
     if (aiResult) {
-      console.log(`    ✅ AI 生成成功，下载并上传到微信永久素材...`);
+      console.log(`    ✅ AI 生成成功，下载并保存到服务器...`);
       const finalUrl = await downloadAndUpload(aiResult.url);
-      return { url: finalUrl, source: '通义万相→微信', photographer: 'AI生成' };
+      return { url: finalUrl, source: '通义万相→本地', photographer: 'AI生成' };
     }
     console.log(`    ⚠️  AI 生成失败，降级到 Pixabay`);
   }
@@ -407,9 +407,9 @@ async function findCoverImage(title, useAI = true) {
   for (const { kw, label } of keywords) {
     const result = await searchPixabay(kw);
     if (result) {
-      console.log(`    🖼️  ${label} → 找到，下载并上传到微信永久素材...`);
+      console.log(`    🖼️  ${label} → 找到，下载并保存到服务器...`);
       const finalUrl = await downloadAndUpload(result.url);
-      return { url: finalUrl, source: 'Pixabay→微信', photographer: result.photographer || '' };
+      return { url: finalUrl, source: 'Pixabay→本地', photographer: result.photographer || '' };
     }
     await sleep(300);
   }
