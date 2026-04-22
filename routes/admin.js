@@ -19,61 +19,16 @@ const BrowseHistory = require('../models/BrowseHistory');
 const MealPlan = require('../models/MealPlan');
 const Report = require('../models/Report');
 const PublishedArticle = require('../models/PublishedArticle');
+const { verifyToken, checkAuth, TOKENS_MAP } = require('./auth');
 
 // ========== 管理员账号配置 ==========
-// 生产环境应从数据库读取，这里简化处理
 const ADMIN_ACCOUNTS = {
-  'admin': {
-    password: 'wang123456',  // 密码
-    name: '管理员',
-  }
+  'admin': { password: 'wang123456', name: '管理员' }
 };
 
-// Token 存储：数据库 admin_tokens 表，容器重启不丢
-// 表未创建前降级到内存 Map
-const TOKENS_MAP = new Map();
-
-// 生成 token（16 字节 hex = 32 字符）
+// Token 生成（admin.js 和 auth.js 共享）
 function generateToken() {
   return crypto.randomBytes(16).toString('hex');
-}
-
-// 验证 token（从数据库读取；表不存在时降级到内存 Map）
-async function verifyToken(token) {
-  if (!token) return null;
-  try {
-    const record = await AdminToken.findOne({ where: { token } });
-    if (!record) return null;
-    if (new Date(record.expires_at) < new Date()) {
-      await record.destroy();
-      return null;
-    }
-    return { username: record.username, name: record.name };
-  } catch (e) {
-    // 表不存在时降级到内存 Map（首次部署时）
-    if (e.original && e.original.code === 'ER_NO_SUCH_TABLE') {
-      const info = TOKENS_MAP.get(token);
-      if (!info) return null;
-      if (Date.now() > info.expires) {
-        TOKENS_MAP.delete(token);
-        return null;
-      }
-      return info;
-    }
-    console.error('[verifyToken] DB 错误（非表不存在）:', e.message);
-    return null;
-  }
-}
-
-// 中间件：检查 token（支持同步调用，验证失败返回 401）
-async function checkAuth(req, res, next) {
-  const token = req.query.token || req.body.token || req.headers['x-admin-token'];
-  const info = await verifyToken(token);
-  if (!info) {
-    return res.status(401).json({ error: '未登录或 token 已过期' });
-  }
-  req.adminUser = info;
-  next();
 }
 
 // ========== 登录 ==========
