@@ -168,7 +168,14 @@ function renderTable(articles) {
       <td class="date-cell">${a.published_at ? formatDate(a.published_at) : '—'}</td>
       <td class="draft-cell" title="${escapeHtml(a.draft_id || '')}">${a.draft_id || '—'}</td>
       <td>
+        <button class="btn btn-primary expand-btn" style="padding:4px 10px;font-size:12px;margin-right:4px"
+          onclick="toggleRecipes(${a.id}, this)">展开菜谱</button>
         <button class="btn btn-danger" style="padding:4px 10px;font-size:12px" onclick="deleteArticle(${a.id}, '${escapeHtml(a.title || '')}')">删除</button>
+      </td>
+    </tr>
+    <tr class="recipes-row" id="recipes-${a.id}" style="display:none">
+      <td colspan="6" style="padding:12px 16px 16px;background:#fafafa">
+        <div id="recipes-content-${a.id}"><span style="color:#aaa">加载中…</span></div>
       </td>
     </tr>
   `).join('');
@@ -266,6 +273,62 @@ function pad(n) { return n < 10 ? '0' + n : n; }
 function logout() {
   localStorage.removeItem('admin_token');
   location.href = 'index.html';
+}
+
+// 展开/收起菜谱列表
+const _recipeCache = {};
+async function toggleRecipes(id, btn) {
+  const row = document.getElementById(`recipes-${id}`);
+  if (row.style.display !== 'none') {
+    // 收起
+    row.style.display = 'none';
+    btn.textContent = '展开菜谱';
+    return;
+  }
+
+  // 展开
+  row.style.display = '';
+  btn.textContent = '收起';
+
+  // 已有缓存直接渲染
+  if (_recipeCache[id]) {
+    renderRecipes(id, _recipeCache[id]);
+    return;
+  }
+
+  // 加载
+  try {
+    const resp = await fetch(`${API_BASE}/admin/articles/${id}/recipes?token=${getToken()}`);
+    const data = await resp.json();
+    if (data.success) {
+      _recipeCache[id] = data;
+      renderRecipes(id, data);
+    } else {
+      document.getElementById(`recipes-content-${id}`).innerHTML =
+        `<span style="color:#e74c3c">加载失败：${data.error}</span>`;
+    }
+  } catch (e) {
+    document.getElementById(`recipes-content-${id}`).innerHTML =
+      `<span style="color:#e74c3c">网络错误：${e.message}</span>`;
+  }
+}
+
+function renderRecipes(id, data) {
+  const el = document.getElementById(`recipes-content-${id}`);
+  const { recipes, filename, message } = data;
+
+  if (!recipes || recipes.length === 0) {
+    el.innerHTML = `<span style="color:#888">${message || '未找到菜谱'}</span>`;
+    return;
+  }
+
+  el.innerHTML = `<div style="margin-bottom:8px;font-size:12px;color:#888">📄 ${escapeHtml(filename || '')}  ·  共 ${recipes.length} 道菜</div>` +
+    recipes.map(r => `
+      <div style="display:inline-block;margin:4px 4px 4px 0;padding:6px 12px;background:white;border-radius:6px;border:1px solid #eee;font-size:13px;min-width:120px">
+        <div style="font-weight:600;color:#2c3e50">${escapeHtml(r.title)}</div>
+        <div style="color:#888;font-size:11px;margin-top:2px">${r.ingredients.slice(0, 3).join('、')}${r.ingredients.length > 3 ? '…' : ''}  ·  ${r.steps}步</div>
+      </div>
+    `).join('');
 }
 
 loadData();
