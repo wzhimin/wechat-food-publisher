@@ -89,7 +89,14 @@ const Recipe = sequelize.define('Recipe', {
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',
-  // 索引通过数据库迁移或手动创建，避免 alter safe 时字段不存在报错
+  indexes: [
+    // 防止 (title, articleId) 重复
+    {
+      name: 'recipe_unique_title_article',
+      unique: true,
+      fields: ['title', 'article_id'],
+    },
+  ],
 });
 
 module.exports = Recipe;

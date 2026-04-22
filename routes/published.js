@@ -136,14 +136,16 @@ router.get('/topics', async (req, res) => {
 // 记录一篇已发布的文章（发布成功后调用）
 // ============================================================
 router.post('/record', recordVerify, async (req, res) => {
-  const { title, topic, draft_id, published_at } = req.body;
+  const { title, topic, draft_id, published_at, article_md5: provided_md5 } = req.body;
 
   if (!title) {
     return res.json({ success: false, error: 'title 必填' });
   }
 
-  const content = `${title}|${topic || ''}`;
-  const article_md5 = crypto.createHash('md5').update(content).digest('hex');
+  // 支持外部传入 article_md5（用于重同步场景），否则自己算
+  const article_md5 = provided_md5 || crypto.createHash('md5')
+    .update(`${title}|${topic || ''}`)
+    .digest('hex');
 
   try {
     const existing = await PublishedArticle.findOne({ where: { article_md5 } });

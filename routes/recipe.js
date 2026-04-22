@@ -230,7 +230,18 @@ router.post('/parse', async (req, res) => {
     const recipes = parseMarkdownRecipes(markdown, { cover, articleId, publishedAt });
     if (recipes.length === 0) return res.status(400).json({ error: '未解析到菜谱，请检查 markdown 格式' });
 
-    const created = await Recipe.bulkCreate(recipes, { ignoreDuplicates: true });
+    // 用 findOrCreate 实现 upsert，按 (title, articleId) 防止重复
+    const created = [];
+    for (const r of recipes) {
+      const [instance] = await Recipe.findOrCreate({
+        where: {
+          title: r.title,
+          articleId: r.articleId || null,
+        },
+        defaults: { ...r, articleId: r.articleId || null },
+      });
+      created.push(instance);
+    }
     res.json({ success: true, count: created.length, data: created });
   } catch (err) {
     console.error('[/api/recipe/parse]', err.message);

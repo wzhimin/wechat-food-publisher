@@ -747,19 +747,21 @@ init()
 
     console.log('数据库初始化完成');
 
-    // 确保 recipes.title 唯一索引存在（用于菜谱去重 upsert）
+    // 确保 recipes (title, articleId) 唯一索引存在（用于菜谱 upsert 防重）
     try {
       const { sequelize } = require('./db');
-      const indexes = await sequelize.query("SHOW INDEX FROM recipes WHERE Key_name = 'recipes_title_unique'", { type: sequelize.QueryTypes.SELECT });
+      const indexes = await sequelize.query("SHOW INDEX FROM recipes WHERE Key_name = 'recipe_unique_title_article'", { type: sequelize.QueryTypes.SELECT });
       if (indexes.length === 0) {
-        // 先清理重复 title，保留最新一条
+        // 先清理重复 (title, article_id)，保留 id 最大的一条
         await sequelize.query(`
           DELETE r1 FROM recipes r1
           INNER JOIN recipes r2
-          ON r1.title = r2.title AND r1.id < r2.id
+          ON r1.title = r2.title
+          AND IFNULL(r1.article_id, '') = IFNULL(r2.article_id, '')
+          AND r1.id < r2.id
         `);
-        await sequelize.query('ALTER TABLE recipes ADD UNIQUE INDEX recipes_title_unique (title)');
-        console.log('[索引] 已创建 recipes.title 唯一索引');
+        await sequelize.query('ALTER TABLE recipes ADD UNIQUE INDEX recipe_unique_title_article (title, article_id)');
+        console.log('[索引] 已创建 recipes(title, article_id) 唯一索引');
       }
     } catch (err) {
       console.error('[索引] 创建唯一索引失败:', err.message);
