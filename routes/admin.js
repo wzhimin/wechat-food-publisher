@@ -845,7 +845,7 @@ router.get('/articles/:id/recipes', checkAuth, async (req, res) => {
     // Recipe.articleId = 同 draft_id，两边通过 articleId 关联
     const recipes = await Recipe.findAll({
       where: { articleId: article.draft_id },
-      order: [['createdAt', 'ASC']],
+      order: [['created_at', 'ASC']],
     });
 
     res.json({
