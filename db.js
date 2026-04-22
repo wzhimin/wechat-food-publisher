@@ -20,13 +20,7 @@ const Counter = sequelize.define("Counter", {
   },
 });
 
-// AdminToken 在模块顶层 require，避免 ReferenceError
-let AdminToken;
-try {
-  AdminToken = require("./models/AdminToken");
-} catch (e) {
-  AdminToken = null;
-}
+// AdminToken 在 init() 内部 require，避免循环依赖（顶层 require 时 db.js 的 module.exports 还未生成）
 
 // 数据库初始化方法
 async function init() {
@@ -114,11 +108,10 @@ async function init() {
   // 第五步：同步 Counter 表
   await Counter.sync({ alter: true });
 
-  // 第六步：同步 admin_tokens 表
-  if (AdminToken) {
-    await AdminToken.sync({ alter: true });
-    console.log('[sync] AdminToken 创建完成');
-  }
+  // 第六步：同步 admin_tokens 表（init 内 require 避免循环依赖）
+  const AdminToken = require("./models/AdminToken");
+  await AdminToken.sync({ alter: true });
+  console.log('[sync] AdminToken 创建完成');
 
   // 第七步：同步 published_articles 表
   const PublishedArticle = require('./models/PublishedArticle');
@@ -139,5 +132,4 @@ module.exports = {
   init,
   sequelize,
   Counter,
-  AdminToken,
 };

@@ -60,6 +60,7 @@ async function verifyToken(token) {
       }
       return info;
     }
+    console.error('[verifyToken] DB 错误（非表不存在）:', e.message);
     return null;
   }
 }
@@ -869,10 +870,10 @@ router.post('/run-script', checkAuth, async (req, res) => {
     return res.status(404).json({ success: false, error: `脚本不存在: ${script}` });
   }
 
+  let stdout = '', stderr = '';
   try {
     const { spawn } = require('child_process');
     const node = process.execPath;
-    let stdout = '', stderr = '';
 
     await new Promise((resolve, reject) => {
       const child = spawn(node, [scriptPath], { env: { ...process.env } });
