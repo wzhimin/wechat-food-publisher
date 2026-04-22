@@ -120,11 +120,12 @@ async function main() {
 
   for (const article of articles) {
     try {
-      const resp = await httpPost('/api/published/record', {
+      const resp = await httpPost('/api/published/record?secret=published_record_secret_2026', {
         title: article.title,
         topic: article.topic,
         draft_id: '',
         published_at: article.date,
+        secret: 'published_record_secret_2026',
       });
 
       if (resp.success) {
