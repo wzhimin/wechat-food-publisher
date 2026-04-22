@@ -190,16 +190,22 @@ function stripHtml(html) {
 // Body: { markdown, articleId?, topic? }
 app.post('/api/recipe/sync', async (req, res) => {
   try {
-    const { markdown, articleId, topic } = req.body;
+    const { markdown, articleId, topic, title: bodyTitle } = req.body;
     if (!markdown) return res.status(400).json({ error: '缺少 markdown' });
 
-    // 从 front matter 提取 title，计算 MD5 关联 published_articles
+    // 从 body.title 或 front matter 提取 title，计算 MD5 关联 published_articles
     let articleMd5 = null;
     let resolvedPublishedArticleId = null;
+    const mdTopic = topic || '';
+    let mdTitle = bodyTitle || '';
+
+    // 优先用 front matter 的 title（如果有）
     const titleMatch = markdown.match(/^title:\s*["']?(.+?)["']?\s*$/m);
     if (titleMatch) {
-      const mdTitle = titleMatch[1].trim();
-      const mdTopic = topic || '';
+      mdTitle = titleMatch[1].trim();
+    }
+
+    if (mdTitle) {
       articleMd5 = crypto.createHash('md5').update(`${mdTitle}|${mdTopic}`).digest('hex');
       // 先按精确 MD5 查，查不到再按 title 模糊匹配
       let pa = await PublishedArticle.findOne({ where: { article_md5: articleMd5 } });
