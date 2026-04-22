@@ -178,11 +178,12 @@ async function main() {
       continue;
     }
 
-    // Step 2b: sync recipes
+    // Step 2b: sync recipes（传 articleMd5，由后端自动补 publishedArticleId）
     try {
       const syncRes = await post(`${BASE_URL}/api/recipe/parse`, {
         markdown: content,
-        articleId: articleMd5,   // 用 article_md5 作为 articleId
+        articleId: articleMd5,   // MD5 存 articleId 供查重
+        articleMd5: articleMd5,  // 关联 published_articles
         publishedAt,
       });
       if (syncRes.success) {

@@ -3,6 +3,7 @@ const router = express.Router();
 const { Op } = require('sequelize');
 const axios = require('axios');
 const Recipe = require('../models/Recipe');
+const PublishedArticle = require('../models/PublishedArticle');
 const User = require('../models/User');
 
 // ========== 微信内容安全审核 ==========
@@ -211,10 +212,10 @@ router.post('/delete', async (req, res) => {
 
 // POST /api/recipe/parse
 // 解析 markdown 文本，批量入库菜谱
-// Body: { markdown, cover?, articleId?, publishedAt? }
+// Body: { markdown, cover?, articleId?, articleMd5?, publishedArticleId?, publishedAt? }
 router.post('/parse', async (req, res) => {
   try {
-    let { markdown, cover, articleId, publishedAt } = req.body;
+    let { markdown, cover, articleId, articleMd5, publishedArticleId, publishedAt } = req.body;
     if (!markdown) return res.status(400).json({ error: '缺少 markdown' });
 
     // 如果没有传 cover，尝试从 markdown front matter 中提取
@@ -222,7 +223,6 @@ router.post('/parse', async (req, res) => {
       const coverMatch = markdown.match(/^cover:\s*(.+)/m);
       if (coverMatch) {
         cover = coverMatch[1].trim();
-        // 去掉可能的引号
         cover = cover.replace(/^["']|["']$/g, '');
       }
     }
@@ -230,16 +230,31 @@ router.post('/parse', async (req, res) => {
     const recipes = parseMarkdownRecipes(markdown, { cover, articleId, publishedAt });
     if (recipes.length === 0) return res.status(400).json({ error: '未解析到菜谱，请检查 markdown 格式' });
 
-    // 用 findOrCreate 实现 upsert，按 (title, articleId) 防止重复
+    // 如果只传了 articleMd5 但没传 publishedArticleId，自动查表补上
+    let resolvedPublishedArticleId = publishedArticleId || null;
+    if (!resolvedPublishedArticleId && articleMd5) {
+      const pa = await PublishedArticle.findOne({ where: { article_md5: articleMd5 } });
+      if (pa) resolvedPublishedArticleId = pa.id;
+    }
+
     const created = [];
     for (const r of recipes) {
-      const [instance] = await Recipe.findOrCreate({
-        where: {
-          title: r.title,
+      const [instance, isNew] = await Recipe.findOrCreate({
+        where: { title: r.title, articleId: r.articleId || null },
+        defaults: {
+          ...r,
           articleId: r.articleId || null,
+          articleMd5: articleMd5 || null,
+          publishedArticleId: resolvedPublishedArticleId,
         },
-        defaults: { ...r, articleId: r.articleId || null },
       });
+      // 已存在菜谱：补关联字段
+      if (!isNew) {
+        const updates = {};
+        if (articleMd5 && !instance.articleMd5) updates.articleMd5 = articleMd5;
+        if (resolvedPublishedArticleId && !instance.publishedArticleId) updates.publishedArticleId = resolvedPublishedArticleId;
+        if (Object.keys(updates).length > 0) await instance.update(updates);
+      }
       created.push(instance);
     }
     res.json({ success: true, count: created.length, data: created });

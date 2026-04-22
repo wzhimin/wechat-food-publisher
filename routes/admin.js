@@ -831,7 +831,7 @@ router.get('/reports/stats', checkAuth, async (req, res) => {
 });
 
 // GET /api/admin/articles/:id/recipes
-// 查询选题记录关联的菜谱列表（从数据库查询）
+// 查询选题记录关联的菜谱列表（通过 publishedArticleId 关联）
 router.get('/articles/:id/recipes', checkAuth, async (req, res) => {
   const { id } = req.params;
 
@@ -841,10 +841,14 @@ router.get('/articles/:id/recipes', checkAuth, async (req, res) => {
       return res.status(404).json({ error: '记录不存在' });
     }
 
-    // article.draft_id = PublishedArticle.draft_id
-    // Recipe.articleId = 同 draft_id，两边通过 articleId 关联
+    // 优先用显式 FK 字段关联，其次用 article_md5 回退
     const recipes = await Recipe.findAll({
-      where: { articleId: article.draft_id },
+      where: article.article_md5
+        ? { [require('sequelize').Op.or]: [
+            { publishedArticleId: id },
+            { articleMd5: article.article_md5 },
+          ] }
+        : { publishedArticleId: id },
       order: [['created_at', 'ASC']],
     });
 

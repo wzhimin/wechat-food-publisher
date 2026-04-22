@@ -118,7 +118,12 @@ async function init() {
   await PublishedArticle.sync({ alter: true });
   console.log('[sync] PublishedArticle 创建完成');
 
-  // 第八步：确保 published_articles 表字符集为 utf8mb4（支持 emoji）
+  // 第八步：同步 Recipe 表（新字段 articleMd5、publishedArticleId）
+  const Recipe = require('./models/Recipe');
+  await Recipe.sync({ alter: true });
+  console.log('[sync] Recipe 新字段同步完成');
+
+  // 第九步：确保 published_articles 表字符集为 utf8mb4（支持 emoji）
   try {
     await sequelize.query(
       "ALTER TABLE published_articles CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"

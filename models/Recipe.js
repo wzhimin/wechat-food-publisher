@@ -42,8 +42,15 @@ const Recipe = sequelize.define('Recipe', {
   },
   articleId: {
     type: DataTypes.STRING(64),
-
     comment: '公众号文章素材ID',
+  },
+  articleMd5: {
+    type: DataTypes.STRING(32),
+    comment: '文章MD5关联 published_articles.article_md5',
+  },
+  publishedArticleId: {
+    type: DataTypes.INTEGER,
+    comment: '显式FK关联 published_articles.id',
   },
   publishedAt: {
     type: DataTypes.DATE,
