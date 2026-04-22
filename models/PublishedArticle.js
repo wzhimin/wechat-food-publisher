@@ -6,10 +6,14 @@ const PublishedArticle = sequelize.define('PublishedArticle', {
     type: DataTypes.STRING(256),
     allowNull: false,
     comment: '文章标题',
+    charset: 'utf8mb4',
+    collate: 'utf8mb4_unicode_ci',
   },
   topic: {
     type: DataTypes.STRING(512),
     comment: '文章主题/选题描述，如"8道春季养生汤"',
+    charset: 'utf8mb4',
+    collate: 'utf8mb4_unicode_ci',
   },
   draft_id: {
     type: DataTypes.STRING(64),
@@ -26,6 +30,8 @@ const PublishedArticle = sequelize.define('PublishedArticle', {
 }, {
   tableName: 'published_articles',
   comment: '公众号已发布文章历史记录',
+  charset: 'utf8mb4',
+  collate: 'utf8mb4_unicode_ci',
   timestamps: true,
 });
 

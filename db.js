@@ -110,6 +110,14 @@ async function init() {
   const PublishedArticle = require('./models/PublishedArticle');
   await PublishedArticle.sync({ alter: true });
   console.log('[sync] PublishedArticle 创建完成');
+
+  // 第五步：确保 published_articles 表字符集为 utf8mb4（支持 emoji）
+  try {
+    await sequelize.query(
+      "ALTER TABLE published_articles CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+    );
+    console.log('[修复] published_articles 字符集 → utf8mb4');
+  } catch (e) { console.warn('[修复] published_articles 字符集出错:', e.message); }
 }
 
 // 导出初始化方法和模型
