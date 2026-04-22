@@ -175,6 +175,22 @@ router.post('/record', recordVerify, async (req, res) => {
 });
 
 // ============================================================
+// DELETE /api/published/clear
+// 清空所有选题记录（后台管理用）
+// ⚠️ 必须放在 /:id 前面，否则 /clear 会被 /:id 拦截
+// ============================================================
+router.delete('/clear', recordVerify, async (req, res) => {
+  try {
+    const count = await PublishedArticle.destroy({ where: {}, truncate: true });
+    console.log(`[published/clear] 清空 ${count} 条选题记录`);
+    res.json({ success: true, count });
+  } catch (e) {
+    console.error('[published/clear]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ============================================================
 // DELETE /api/published/:id
 // 删除一条记录（后台管理用）
 // ============================================================
@@ -184,21 +200,6 @@ router.delete('/:id', recordVerify, async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     console.error('[published/delete]', e.message);
-    res.status(500).json({ success: false, error: e.message });
-  }
-});
-
-// ============================================================
-// DELETE /api/published/clear
-// 清空所有选题记录（后台管理用）
-// ============================================================
-router.delete('/clear', recordVerify, async (req, res) => {
-  try {
-    const count = await PublishedArticle.destroy({ where: {}, truncate: true });
-    console.log(`[published/clear] 清空 ${count} 条选题记录`);
-    res.json({ success: true, count });
-  } catch (e) {
-    console.error('[published/clear]', e.message);
     res.status(500).json({ success: false, error: e.message });
   }
 });
