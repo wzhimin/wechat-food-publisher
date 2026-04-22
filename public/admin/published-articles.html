@@ -138,9 +138,7 @@ async function loadData() {
   tb.innerHTML = '<tr><td colspan="6" class="empty">加载中…</td></tr>';
 
   try {
-    const resp = await fetch(`${API_BASE}/api/published/list`, {
-      headers: { 'Authorization': getToken() }
-    });
+    const resp = await fetch(`${API_BASE}/api/published/list?token=${getToken()}`);
     const data = await resp.json();
 
     if (!data.success) {
@@ -193,9 +191,8 @@ async function deleteArticle(id, title) {
   if (!confirm(`确定删除「${title}」这条记录？\n删除后下次发布可能重复选到此主题。`)) return;
 
   try {
-    const resp = await fetch(`${API_BASE}/api/published/${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': getToken() }
+    const resp = await fetch(`${API_BASE}/api/published/${id}?token=${getToken()}`, {
+      method: 'DELETE'
     });
     const data = await resp.json();
     if (data.success) {
@@ -218,12 +215,9 @@ async function migrateHistory() {
 
   try {
     // 通过服务端代理执行一次性脚本（避免跨域）
-    const resp = await fetch(`${API_BASE}/api/admin/run-script`, {
+    const resp = await fetch(`${API_BASE}/api/admin/run-script?token=${getToken()}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': getToken()
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ script: 'migrate-published-articles' })
     });
     const data = await resp.json();
