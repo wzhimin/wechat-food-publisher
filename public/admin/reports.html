@@ -371,7 +371,7 @@
               </div>`;
           } else {
             actionsHtml = `
-              <div class="report-handler">由 ${escapeHtml(r.handled_by || '')} 处理 ${r.handled_at ? '于 ' + formatDate(r.handled_at) : ''}</div>`;
+              <div class="report-handler">由 ${escapeHtml(r.handled_by || '')} 处理 ${r.handled_at ? '于 ' + formatDateTime(r.handled_at) : ''}</div>`;
           }
 
           return `

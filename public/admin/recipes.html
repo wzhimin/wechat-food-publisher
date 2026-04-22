@@ -264,6 +264,15 @@
       <input type="date" id="startDate" onchange="changeFilter()">
       <span>至</span>
       <input type="date" id="endDate" onchange="changeFilter()">
+      <label>排序：</label>
+      <select id="sortBy" onchange="changeFilter()">
+        <option value="created_at">创建时间</option>
+        <option value="updated_at">更新时间</option>
+      </select>
+      <select id="sortOrder" onchange="changeFilter()">
+        <option value="DESC">倒序</option>
+        <option value="ASC">正序</option>
+      </select>
       <input type="text" id="searchInput" class="search-box" placeholder="搜索菜谱标题..." onkeyup="if(event.key==='Enter'){currentPage=1;loadRecipes()}">
       <button class="btn btn-primary" onclick="currentPage=1;loadRecipes()">搜索</button>
       <button class="btn btn-danger" onclick="clearSystemRecipes()">🗑️ 清空系统菜谱</button>
@@ -453,6 +462,9 @@
         const endDate = document.getElementById('endDate').value;
         if (startDate) url += `&startDate=${startDate}`;
         if (endDate) url += `&endDate=${endDate}`;
+        const sortBy = document.getElementById('sortBy').value;
+        const sortOrder = document.getElementById('sortOrder').value;
+        url += `&sortBy=${sortBy}&sortOrder=${sortOrder}`;
         
         const res = await fetch(url);
         if (res.status === 401) {

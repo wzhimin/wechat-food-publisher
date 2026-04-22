@@ -271,7 +271,7 @@ router.post('/comments/reject', checkAuth, async (req, res) => {
 // GET /api/admin/recipes/list
 router.get('/recipes/list', checkAuth, async (req, res) => {
   try {
-    const { status = 'approved', isFeatured, search, page = 1, pageSize = 20, source, startDate, endDate } = req.query;
+    const { status = 'approved', isFeatured, search, page = 1, pageSize = 20, source, startDate, endDate, sortBy = 'created_at', sortOrder = 'DESC' } = req.query;
     const where = {};
     if (status !== 'all') where.status = status;
     if (isFeatured !== undefined) where.is_featured = isFeatured === '1' || isFeatured === 'true';
@@ -293,10 +293,12 @@ router.get('/recipes/list', checkAuth, async (req, res) => {
       where.created_at = { ...where.created_at, [Op.lte]: end };
     }
     
+    const orderDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const orderField = ['created_at', 'updated_at'].includes(sortBy) ? sortBy : 'created_at';
     const offset = (parseInt(page) - 1) * parseInt(pageSize);
     const { count, rows: recipes } = await Recipe.findAndCountAll({
       where,
-      order: [['created_at', 'DESC']],
+      order: [[orderField, orderDir]],
       limit: parseInt(pageSize),
       offset,
     });
