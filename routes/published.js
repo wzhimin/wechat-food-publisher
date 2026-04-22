@@ -5,28 +5,34 @@ const path = require('path');
 const crypto = require('crypto');
 const PublishedArticle = require('../models/PublishedArticle');
 
-// 管理员认证（复用 admin.js 的 checkAuth 逻辑：支持 Bearer header 和 query token）
-function verifyAdmin(req, res, next) {
+// 管理员认证（复用 admin.js 的 TOKENS）
+// 已在 index.js 中通过 require('./routes/admin') 获取 TOKENS 并导出
+let _TOKENS = null;
+function setTokens(tokens) { _TOKENS = tokens; }
+
+// 内部认证函数（由 initAuth 调用）
+function _verifyAdmin(req, res, next) {
   const token = req.query.token || req.body.token ||
     (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ success: false, error: '未登录' });
-  // 复用 admin.js 的 TOKENS Map（通过模块引用）
-  try {
-    const { TOKENS } = require('./admin');
-    const info = TOKENS.get(token);
-    if (!info) return res.status(403).json({ success: false, error: '无权限' });
-    if (Date.now() > info.expires) {
-      TOKENS.delete(token);
-      return res.status(403).json({ success: false, error: '登录已过期，请重新登录' });
-    }
-  } catch (e) {
-    return res.status(500).json({ success: false, error: '认证模块加载失败' });
+  if (!_TOKENS) return res.status(500).json({ success: false, error: '认证模块未初始化' });
+  const info = _TOKENS.get(token);
+  if (!info) return res.status(403).json({ success: false, error: '无权限' });
+  if (Date.now() > info.expires) {
+    _TOKENS.delete(token);
+    return res.status(403).json({ success: false, error: '登录已过期，请重新登录' });
   }
   next();
 }
 
-// /topics 允许公开发布端调用（cron 任务无 token），不加认证
-// /list、/record、/:id 需管理员认证
+// 从外部注入 TOKENS（由 index.js 调用）
+function initAuth(TOKENS) {
+  _TOKENS = TOKENS;
+}
+
+module.exports = router;
+module.exports.initAuth = initAuth;
+module.exports.verifyAdmin = _verifyAdmin;
 
 // 腾讯云托管上的接口地址（开放接口服务，无需 token）
 const BASE_URL = 'https://express-yi42-246142-8-1421971309.sh.run.tcloudbase.com';
@@ -88,7 +94,7 @@ async function fetchLocalTopics() {
 // GET /api/published/list
 // 查询已发布文章列表（后台管理用）
 // ============================================================
-router.get('/list', verifyAdmin, async (req, res) => {
+router.get('/list', _verifyAdmin, async (req, res) => {
   try {
     const articles = await PublishedArticle.findAll({
       order: [['published_at', 'DESC']],
@@ -103,6 +109,7 @@ router.get('/list', verifyAdmin, async (req, res) => {
 // ============================================================
 // GET /api/published/topics
 // 查询所有已发布过的选题（用于发布前避免重复）
+// 发布端 cron 任务调用，无需认证
 // ============================================================
 router.get('/topics', async (req, res) => {
   try {
@@ -119,7 +126,7 @@ router.get('/topics', async (req, res) => {
 // POST /api/published/record
 // 记录一篇已发布的文章（发布成功后调用）
 // ============================================================
-router.post('/record', verifyAdmin, async (req, res) => {
+router.post('/record', _verifyAdmin, async (req, res) => {
   const { title, topic, draft_id, published_at } = req.body;
 
   if (!title) {
@@ -160,7 +167,7 @@ router.post('/record', verifyAdmin, async (req, res) => {
 // DELETE /api/published/:id
 // 删除一条记录（后台管理用）
 // ============================================================
-router.delete('/:id', verifyAdmin, async (req, res) => {
+router.delete('/:id', _verifyAdmin, async (req, res) => {
   try {
     await PublishedArticle.destroy({ where: { id: req.params.id } });
     res.json({ success: true });
@@ -169,5 +176,3 @@ router.delete('/:id', verifyAdmin, async (req, res) => {
     res.status(500).json({ success: false, error: e.message });
   }
 });
-
-module.exports = router;

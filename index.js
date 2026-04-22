@@ -694,6 +694,12 @@ app.use('/api/follow', followRouter);
 app.use('/api/report', reportRouter);
 app.use('/api/published', publishedRouter);
 
+// 将 admin.js 的 TOKENS 注入 published.js（解决循环 require 问题）
+if (adminRouter.TOKENS && publishedRouter.initAuth) {
+  publishedRouter.initAuth(adminRouter.TOKENS);
+  console.log('[auth] publishedRouter 认证模块初始化完成');
+}
+
 const port = process.env.PORT || 80;
 
 // ========== 启动 ==========

@@ -17,6 +17,7 @@ const Collection = require('../models/Collection');
 const BrowseHistory = require('../models/BrowseHistory');
 const MealPlan = require('../models/MealPlan');
 const Report = require('../models/Report');
+const PublishedArticle = require('../models/PublishedArticle');
 
 // ========== 管理员账号配置 ==========
 // 生产环境应从数据库读取，这里简化处理
@@ -29,6 +30,7 @@ const ADMIN_ACCOUNTS = {
 
 // Token 存储（生产环境应使用 Redis 或数据库）
 const TOKENS = new Map();  // token -> { username, expires }
+module.exports.TOKENS = TOKENS;
 
 // 生成 token
 function generateToken() {
