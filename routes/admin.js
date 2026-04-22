@@ -131,7 +131,7 @@ router.get('/stats', checkAuth, async (req, res) => {
 // GET /api/admin/comments/list
 router.get('/comments/list', checkAuth, async (req, res) => {
   try {
-    const { status = 'approved', page = 1, pageSize = 50 } = req.query;
+    const { status = 'approved', page = 1, pageSize = 50, startDate, endDate, sortBy = 'created_at', sortOrder = 'DESC' } = req.query;
     // status=NULL 的旧评论视为 approved
     let where = {};
     if (status === 'all') {
@@ -141,10 +141,23 @@ router.get('/comments/list', checkAuth, async (req, res) => {
     } else {
       where = { status };
     }
-    
+
+    // 时间筛选
+    if (startDate) {
+      where.created_at = { ...where.created_at, [Op.gte]: new Date(startDate) };
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.created_at = { ...where.created_at, [Op.lte]: end };
+    }
+
+    const orderDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const orderField = ['created_at', 'updated_at'].includes(sortBy) ? sortBy : 'created_at';
+
     const comments = await RecipeComment.findAll({
       where,
-      order: [['created_at', 'DESC']],
+      order: [[orderField, orderDir]],
       limit: parseInt(pageSize),
       offset: (parseInt(page) - 1) * parseInt(pageSize),
     });
@@ -429,12 +442,25 @@ router.post('/recipes/delete', checkAuth, async (req, res) => {
 // GET /api/admin/feedbacks/list
 router.get('/feedbacks/list', checkAuth, async (req, res) => {
   try {
-    const { status = 'pending', page = 1, pageSize = 50 } = req.query;
+    const { status = 'pending', page = 1, pageSize = 50, startDate, endDate, sortBy = 'created_at', sortOrder = 'DESC' } = req.query;
     const where = status !== 'all' ? { status } : {};
-    
+
+    // 时间筛选
+    if (startDate) {
+      where.created_at = { ...where.created_at, [Op.gte]: new Date(startDate) };
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.created_at = { ...where.created_at, [Op.lte]: end };
+    }
+
+    const orderDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const orderField = ['created_at', 'updated_at'].includes(sortBy) ? sortBy : 'created_at';
+
     const feedbacks = await Feedback.findAll({
       where,
-      order: [['created_at', 'DESC']],
+      order: [[orderField, orderDir]],
       limit: parseInt(pageSize),
       offset: (parseInt(page) - 1) * parseInt(pageSize),
     });
@@ -550,11 +576,26 @@ router.get('/users/stats', checkAuth, async (req, res) => {
 // GET /api/admin/users/list
 router.get('/users/list', checkAuth, async (req, res) => {
   try {
-    const { page = 1, pageSize = 50 } = req.query;
-    
+    const { page = 1, pageSize = 50, startDate, endDate, sortBy = 'created_at', sortOrder = 'DESC' } = req.query;
+
+    const where = {};
+    // 时间筛选
+    if (startDate) {
+      where.created_at = { ...where.created_at, [Op.gte]: new Date(startDate) };
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.created_at = { ...where.created_at, [Op.lte]: end };
+    }
+
+    const orderDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const orderField = ['created_at', 'updated_at'].includes(sortBy) ? sortBy : 'created_at';
+
     const { count, rows: users } = await User.findAndCountAll({
+      where,
       attributes: ['openid', 'nickName', 'avatarUrl', 'created_at', 'updated_at'],
-      order: [['created_at', 'DESC']],
+      order: [[orderField, orderDir]],
       limit: parseInt(pageSize),
       offset: (parseInt(page) - 1) * parseInt(pageSize),
     });
@@ -610,13 +651,26 @@ router.get('/users/list', checkAuth, async (req, res) => {
 // 列出可能是非菜谱的内容（无食材且无步骤）
 router.get('/recipes/non-dishes', checkAuth, async (req, res) => {
   try {
-    const { page = 1, pageSize = 50 } = req.query;
-    
+    const { page = 1, pageSize = 50, startDate, endDate, sortBy = 'created_at', sortOrder = 'DESC' } = req.query;
+
+    const where = {};
+    if (startDate) {
+      where.created_at = { ...where.created_at, [Op.gte]: new Date(startDate) };
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.created_at = { ...where.created_at, [Op.lte]: end };
+    }
+
+    const orderDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
     // 先获取所有菜谱，然后在内存中过滤
     // 因为 ingredients 和 steps 是 JSON 字段，SQL 难以直接判断
     const allRecipes = await Recipe.findAll({
+      where: Object.keys(where).length ? where : undefined,
       attributes: ['id', 'title', 'cover', 'ingredients', 'steps', 'created_at'],
-      order: [['created_at', 'DESC']],
+      order: [['created_at', orderDir]],
     });
     
     // 过滤出无食材且无步骤的
@@ -717,16 +771,29 @@ router.post('/recipes/clear-system', checkAuth, async (req, res) => {
 // GET /api/admin/reports/list
 router.get('/reports/list', checkAuth, async (req, res) => {
   try {
-    const { status = 'pending', page = 1, pageSize = 50 } = req.query;
+    const { status = 'pending', page = 1, pageSize = 50, startDate, endDate, sortBy = 'created_at', sortOrder = 'DESC' } = req.query;
     
     const where = {};
     if (status !== 'all') {
       where.status = status;
     }
-    
+
+    // 时间筛选
+    if (startDate) {
+      where.created_at = { ...where.created_at, [Op.gte]: new Date(startDate) };
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.created_at = { ...where.created_at, [Op.lte]: end };
+    }
+
+    const orderDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const orderField = ['created_at', 'handled_at'].includes(sortBy) ? sortBy : 'created_at';
+
     const { count, rows } = await Report.findAndCountAll({
       where,
-      order: [['created_at', 'DESC']],
+      order: [[orderField, orderDir]],
       limit: parseInt(pageSize),
       offset: (parseInt(page) - 1) * parseInt(pageSize),
     });

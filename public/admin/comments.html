@@ -159,6 +159,19 @@
         <option value="deleted">已删除</option>
         <option value="all">全部</option>
       </select>
+      <label style="margin-left:12px">时间：</label>
+      <input type="date" id="startDate" onchange="loadComments()">
+      <span>~</span>
+      <input type="date" id="endDate" onchange="loadComments()">
+      <label style="margin-left:12px">排序：</label>
+      <select id="sortBy" onchange="loadComments()">
+        <option value="created_at">创建时间</option>
+        <option value="updated_at">更新时间</option>
+      </select>
+      <select id="sortOrder" onchange="loadComments()">
+        <option value="DESC">最新优先</option>
+        <option value="ASC">最早优先</option>
+      </select>
     </div>
 
     <div class="comment-list" id="commentList">
@@ -182,7 +195,14 @@
       listEl.innerHTML = '<div class="loading">加载中...</div>';
 
       try {
-        const res = await fetch(`${API_BASE}/admin/comments/list?token=${token}&status=${status}`);
+        const sortBy = document.getElementById('sortBy').value;
+        const sortOrder = document.getElementById('sortOrder').value;
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        const params = new URLSearchParams({ token, status, sortBy, sortOrder });
+        if (startDate) params.set('startDate', startDate);
+        if (endDate) params.set('endDate', endDate);
+        const res = await fetch(`${API_BASE}/admin/comments/list?${params.toString()}`);
         if (res.status === 401) {
           localStorage.removeItem('admin_token');
           location.href = 'index.html';
@@ -206,7 +226,7 @@
                 <img src="${c.avatarUrl || 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'}" alt="">
                 <div>
                   <div class="name">${escapeHtml(c.nickName || '用户')}</div>
-                  <div class="time">${new Date(c.created_at).toLocaleString()}</div>
+                  <div class="time">${formatDate(c.created_at)}</div>
                 </div>
               </div>
               <span class="comment-status status-${c.status}">${getStatusText(c.status)}</span>
@@ -259,6 +279,12 @@
 
     function getStatusText(status) {
       return { pending: '待审核', approved: '已通过', rejected: '已拒绝', deleted: '已删除' }[status] || status;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const d = new Date(dateStr);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
     }
 
     function escapeHtml(str) {

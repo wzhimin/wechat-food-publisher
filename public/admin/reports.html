@@ -244,6 +244,19 @@
         <option value="rejected">已驳回</option>
         <option value="all">全部</option>
       </select>
+      <label style="margin-left:12px">时间：</label>
+      <input type="date" id="startDate" onchange="loadList()">
+      <span>~</span>
+      <input type="date" id="endDate" onchange="loadList()">
+      <label style="margin-left:12px">排序：</label>
+      <select id="sortBy" onchange="loadList()">
+        <option value="created_at">创建时间</option>
+        <option value="handled_at">处理时间</option>
+      </select>
+      <select id="sortOrder" onchange="loadList()">
+        <option value="DESC">最新优先</option>
+        <option value="ASC">最早优先</option>
+      </select>
     </div>
 
     <div class="report-list" id="reportList">
@@ -308,7 +321,14 @@
       listEl.innerHTML = '<div class="loading">加载中...</div>';
 
       try {
-        const res = await fetch(`${API_BASE}/admin/reports/list?token=${token}&status=${status}&page=${currentPage}&pageSize=${pageSize}`);
+        const sortBy = document.getElementById('sortBy').value;
+        const sortOrder = document.getElementById('sortOrder').value;
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        const params = new URLSearchParams({ token, status, page: currentPage, pageSize, sortBy, sortOrder });
+        if (startDate) params.set('startDate', startDate);
+        if (endDate) params.set('endDate', endDate);
+        const res = await fetch(`${API_BASE}/admin/reports/list?${params.toString()}`);
         if (res.status === 401) { handleUnauthorized(); return; }
         const data = await res.json();
         if (!data.success) { listEl.innerHTML = '<div class="empty">加载失败：' + escapeHtml(data.error || '') + '</div>'; return; }
@@ -489,7 +509,7 @@
     function formatDateTime(dateStr) {
       if (!dateStr) return '—';
       const d = new Date(dateStr);
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     }
 
     function pad(n) { return n < 10 ? '0' + n : n; }

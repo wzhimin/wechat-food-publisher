@@ -650,7 +650,7 @@
         const reader = new FileReader();
         reader.onload = async (e) => {
           const base64 = e.target.result.split(',')[1];
-          const res = await fetch(`${API_BASE}/upload-image`, {
+          const res = await fetch(`${API_BASE}/upload-cover`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ imageBase64: base64 })

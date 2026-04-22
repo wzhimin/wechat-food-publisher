@@ -567,7 +567,7 @@
         const reader = new FileReader();
         reader.onload = async (e) => {
           const base64 = e.target.result.split(',')[1];
-          const res = await fetch(`${API_BASE}/upload-image`, {
+          const res = await fetch(`${API_BASE}/upload-cover`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ imageBase64: base64 })
@@ -701,7 +701,7 @@
     function formatDate(dateStr) {
       if (!dateStr) return '-';
       const d = new Date(dateStr);
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
     }
     
     function escapeHtml(str) {

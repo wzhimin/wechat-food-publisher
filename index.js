@@ -41,7 +41,8 @@ const publishedRouter = require('./routes/published');
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));
-app.use(express.static('public'));  // 托管静态文件（后台管理页面）
+app.set('trust proxy', true);  // 云托管代理环境下获取真实协议和主机名
+app.use(express.static('public'));  // 托管静态文件（后台管理页面 + covers/）
 
 // ========== 配置区 ==========
 const APP_ID = process.env.WECHAT_APP_ID || 'wx85ae98c22a4d22e1';
@@ -398,7 +399,7 @@ app.post('/api/draft', async (req, res) => {
   }
 });
 
-// 保存封面图到本地（不上传微信素材，仅供小程序展示）
+// 保存封面图到服务器本地（不上传微信素材，仅供小程序展示）
 // POST /api/upload-cover
 // Body: { imageBase64 }
 // 返回: { success: true, url: 'https://xxx.sh.run.tcloudbase.com/covers/xxx.jpg' }
@@ -409,6 +410,18 @@ app.post('/api/upload-cover', async (req, res) => {
       return res.status(400).json({ error: '缺少 imageBase64' });
     }
 
+    const imageBuffer = Buffer.from(imageBase64, 'base64');
+
+    // ========== 图片安全审核 ==========
+    const checkResult = await checkImageSecurity(imageBuffer);
+    if (!checkResult.passed) {
+      console.warn('[封面审核] 未通过:', checkResult.reason);
+      return res.status(403).json({
+        error: '图片内容未通过安全审核，请更换图片',
+        reason: checkResult.reason,
+      });
+    }
+
     // 创建目录
     const coverDir = path.join(__dirname, 'public', 'covers');
     if (!fs.existsSync(coverDir)) {
@@ -417,11 +430,12 @@ app.post('/api/upload-cover', async (req, res) => {
 
     const filename = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
     const filepath = path.join(coverDir, filename);
-    const imageBuffer = Buffer.from(imageBase64, 'base64');
     fs.writeFileSync(filepath, imageBuffer);
 
-    // 返回服务器可访问 URL
-    const imageUrl = `/covers/${filename}`;
+    // 返回完整 URL（小程序需要完整路径才能加载）
+    const host = req.get('host');
+    const protocol = req.protocol;
+    const imageUrl = host ? `${protocol}://${host}/covers/${filename}` : `/covers/${filename}`;
 
     res.json({
       success: true,

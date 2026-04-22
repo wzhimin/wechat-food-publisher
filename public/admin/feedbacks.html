@@ -178,6 +178,19 @@
         <option value="resolved">已处理</option>
         <option value="all">全部</option>
       </select>
+      <label style="margin-left:12px">时间：</label>
+      <input type="date" id="startDate" onchange="loadFeedbacks()">
+      <span>~</span>
+      <input type="date" id="endDate" onchange="loadFeedbacks()">
+      <label style="margin-left:12px">排序：</label>
+      <select id="sortBy" onchange="loadFeedbacks()">
+        <option value="created_at">创建时间</option>
+        <option value="updated_at">更新时间</option>
+      </select>
+      <select id="sortOrder" onchange="loadFeedbacks()">
+        <option value="DESC">最新优先</option>
+        <option value="ASC">最早优先</option>
+      </select>
     </div>
     
     <div class="feedback-list" id="feedbackList">
@@ -201,7 +214,14 @@
       listEl.innerHTML = '<div class="loading">加载中...</div>';
       
       try {
-        const res = await fetch(`${API_BASE}/admin/feedbacks/list?token=${token}&status=${status}`);
+        const sortBy = document.getElementById('sortBy').value;
+        const sortOrder = document.getElementById('sortOrder').value;
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        const params = new URLSearchParams({ token, status, sortBy, sortOrder });
+        if (startDate) params.set('startDate', startDate);
+        if (endDate) params.set('endDate', endDate);
+        const res = await fetch(`${API_BASE}/admin/feedbacks/list?${params.toString()}`);
         if (res.status === 401) {
           localStorage.removeItem('admin_token');
           location.href = 'index.html';
@@ -221,7 +241,7 @@
                 <img src="${f.avatarUrl || 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'}" alt="">
                 <div>
                   <div class="name">${f.nickName || '用户'}</div>
-                  <div class="time">${new Date(f.created_at).toLocaleString()}</div>
+                  <div class="time">${formatDate(f.created_at)}</div>
                 </div>
               </div>
               <span class="status-badge status-${f.status}">${f.status === 'pending' ? '待处理' : '已处理'}</span>
@@ -320,6 +340,12 @@
       }
     }
     
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const d = new Date(dateStr);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+    }
+
     function escapeHtml(str) {
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }

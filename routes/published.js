@@ -3,6 +3,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { Op } = require('sequelize');
 const PublishedArticle = require('../models/PublishedArticle');
 const { verifyToken } = require('./auth');
 
@@ -105,8 +106,23 @@ async function fetchLocalTopics() {
 // ============================================================
 router.get('/list', recordVerify, async (req, res) => {
   try {
+    const { startDate, endDate, sortBy = 'published_at', sortOrder = 'DESC' } = req.query;
+    const where = {};
+    if (startDate) {
+      where.published_at = { ...where.published_at, [Op.gte]: new Date(startDate) };
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.published_at = { ...where.published_at, [Op.lte]: end };
+    }
+
+    const orderDir = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const orderField = ['published_at', 'created_at'].includes(sortBy) ? sortBy : 'published_at';
+
     const articles = await PublishedArticle.findAll({
-      order: [['published_at', 'DESC']],
+      where: Object.keys(where).length ? where : undefined,
+      order: [[orderField, orderDir]],
     });
     res.json({ success: true, articles });
   } catch (e) {
