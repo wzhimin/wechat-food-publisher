@@ -854,18 +854,43 @@ router.get('/articles/:id/recipes', checkAuth, async (req, res) => {
 
     res.json({
       success: true,
-      recipes: recipes.map(r => ({
-        id: r.id,
-        title: r.title,
-        cover: r.cover,
-        tags: r.tags,
-        difficulty: r.difficulty,
-        duration: r.duration,
-        status: r.status,
-        isFeatured: r.isFeatured,
-        likeCount: r.likeCount,
-        commentCount: r.commentCount,
-      })),
+      recipes: recipes.map(r => {
+        // ingredients 在 DB 中可能是 JSON 字符串，需解析
+        let ingredients = [];
+        try {
+          if (Array.isArray(r.ingredients)) {
+            ingredients = r.ingredients;
+          } else if (r.ingredients && typeof r.ingredients === 'string') {
+            ingredients = JSON.parse(r.ingredients);
+          }
+        } catch { ingredients = []; }
+
+        // steps 在 DB 中可能是 JSON 数组字符串
+        let stepCount = 0;
+        try {
+          if (Array.isArray(r.steps)) {
+            stepCount = r.steps.length;
+          } else if (r.steps && typeof r.steps === 'string') {
+            const parsed = JSON.parse(r.steps);
+            stepCount = Array.isArray(parsed) ? parsed.length : 0;
+          }
+        } catch { stepCount = 0; }
+
+        return {
+          id: r.id,
+          title: r.title,
+          cover: r.cover,
+          tags: r.tags,
+          difficulty: r.difficulty,
+          duration: r.duration,
+          status: r.status,
+          isFeatured: r.isFeatured,
+          likeCount: r.likeCount,
+          commentCount: r.commentCount,
+          ingredients,
+          steps: stepCount,
+        };
+      }),
       filename: null,
     });
   } catch (err) {

@@ -187,3 +187,18 @@ router.delete('/:id', recordVerify, async (req, res) => {
     res.status(500).json({ success: false, error: e.message });
   }
 });
+
+// ============================================================
+// DELETE /api/published/clear
+// 清空所有选题记录（后台管理用）
+// ============================================================
+router.delete('/clear', recordVerify, async (req, res) => {
+  try {
+    const count = await PublishedArticle.destroy({ where: {}, truncate: true });
+    console.log(`[published/clear] 清空 ${count} 条选题记录`);
+    res.json({ success: true, count });
+  } catch (e) {
+    console.error('[published/clear]', e.message);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});

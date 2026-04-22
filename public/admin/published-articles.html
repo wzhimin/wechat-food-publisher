@@ -108,6 +108,7 @@
   <div class="toolbar">
     <input type="text" class="search-input" placeholder="搜索标题或主题…" oninput="filterTable(this.value)">
     <button class="btn btn-gray" onclick="loadData()">刷新</button>
+    <button class="btn btn-danger" onclick="clearAll()">一键清空</button>
     <span class="count-tag" id="countTag">共 0 条</span>
   </div>
 
@@ -207,6 +208,25 @@ async function deleteArticle(id, title) {
       loadData();
     } else {
       showToast('删除失败：' + (data.error || ''), 'error');
+    }
+  } catch (e) {
+    showToast('网络错误：' + e.message, 'error');
+  }
+}
+
+async function clearAll() {
+  if (!confirm('⚠️ 确定清空所有选题记录？\n\n清空后发布前查重将失效，可能重复选题。\n菜谱数据不受影响。')) return;
+
+  try {
+    const resp = await fetch(`${API_BASE}/published/clear?token=${getToken()}`, {
+      method: 'DELETE'
+    });
+    const data = await resp.json();
+    if (data.success) {
+      showToast(`已清空 ${data.count || 0} 条记录`, 'success');
+      loadData();
+    } else {
+      showToast('清空失败：' + (data.error || ''), 'error');
     }
   } catch (e) {
     showToast('网络错误：' + e.message, 'error');
@@ -322,13 +342,15 @@ function renderRecipes(id, data) {
     return;
   }
 
-  el.innerHTML = `<div style="margin-bottom:8px;font-size:12px;color:#888">📄 ${escapeHtml(filename || '')}  ·  共 ${recipes.length} 道菜</div>` +
-    recipes.map(r => `
-      <div style="display:inline-block;margin:4px 4px 4px 0;padding:6px 12px;background:white;border-radius:6px;border:1px solid #eee;font-size:13px;min-width:120px">
+  el.innerHTML = `<div style="margin-bottom:8px;font-size:12px;color:#888">共 ${recipes.length} 道菜</div>` +
+    recipes.map(r => {
+      const ings = Array.isArray(r.ingredients) ? r.ingredients : [];
+      const steps = typeof r.steps === 'number' ? r.steps : 0;
+      return `<div style="display:inline-block;margin:4px 4px 4px 0;padding:6px 12px;background:white;border-radius:6px;border:1px solid #eee;font-size:13px;min-width:120px">
         <div style="font-weight:600;color:#2c3e50">${escapeHtml(r.title)}</div>
-        <div style="color:#888;font-size:11px;margin-top:2px">${r.ingredients.slice(0, 3).join('、')}${r.ingredients.length > 3 ? '…' : ''}  ·  ${r.steps}步</div>
-      </div>
-    `).join('');
+        <div style="color:#888;font-size:11px;margin-top:2px">${ings.slice(0, 3).join('、')}${ings.length > 3 ? '…' : ''}  ·  ${steps}步</div>
+      </div>`;
+    }).join('');
 }
 
 loadData();
