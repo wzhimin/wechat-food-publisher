@@ -8,6 +8,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const { Op } = require('sequelize');
 const { sequelize: dbSeq } = require('../db');
+const AdminToken = require('../models/AdminToken');
 const RecipeComment = require('../models/RecipeComment');
 const Recipe = require('../models/Recipe');
 const Feedback = require('../models/Feedback');
@@ -28,31 +29,29 @@ const ADMIN_ACCOUNTS = {
   }
 };
 
-// Token 存储（生产环境应使用 Redis 或数据库）
-const TOKENS = new Map();  // token -> { username, expires }
-module.exports.TOKENS = TOKENS;
+// Token 存储：数据库 admin_tokens 表，容器重启不丢
 
-// 生成 token
+// 生成 token（16 字节 hex = 32 字符）
 function generateToken() {
-  return crypto.randomBytes(32).toString('hex');
+  return crypto.randomBytes(16).toString('hex');
 }
 
-// 验证 token
-function verifyToken(token) {
+// 验证 token（从数据库读取）
+async function verifyToken(token) {
   if (!token) return null;
-  const info = TOKENS.get(token);
-  if (!info) return null;
-  if (Date.now() > info.expires) {
-    TOKENS.delete(token);
+  const record = await AdminToken.findOne({ where: { token } });
+  if (!record) return null;
+  if (new Date(record.expires_at) < new Date()) {
+    await record.destroy();
     return null;
   }
-  return info;
+  return { username: record.username, name: record.name };
 }
 
-// 中间件：检查 token
-function checkAuth(req, res, next) {
+// 中间件：检查 token（支持同步调用，验证失败返回 401）
+async function checkAuth(req, res, next) {
   const token = req.query.token || req.body.token || req.headers['x-admin-token'];
-  const info = verifyToken(token);
+  const info = await verifyToken(token);
   if (!info) {
     return res.status(401).json({ error: '未登录或 token 已过期' });
   }
@@ -76,12 +75,13 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: '账号或密码错误' });
     }
     
-    // 生成 token，有效期 24 小时
+    // 生成 token，有效期 7 天，写入数据库
     const token = generateToken();
-    TOKENS.set(token, {
+    await AdminToken.create({
+      token,
       username,
       name: account.name,
-      expires: Date.now() + 24 * 60 * 60 * 1000,
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
     
     res.json({
@@ -861,5 +861,4 @@ router.post('/run-script', checkAuth, async (req, res) => {
   }
 });
 
-router.TOKENS = TOKENS;
 module.exports = router;

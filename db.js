@@ -106,7 +106,12 @@ async function init() {
   // 第三步：同步 Counter 表
   await Counter.sync({ alter: true });
 
-  // 第四步：同步 published_articles 表
+  // 第四步：同步 admin_tokens 表
+  const AdminToken = require('./models/AdminToken');
+  await AdminToken.sync({ alter: true });
+  console.log('[sync] AdminToken 创建完成');
+
+  // 第五步：同步 published_articles 表
   const PublishedArticle = require('./models/PublishedArticle');
   await PublishedArticle.sync({ alter: true });
   console.log('[sync] PublishedArticle 创建完成');
@@ -125,4 +130,5 @@ module.exports = {
   init,
   sequelize,
   Counter,
+  AdminToken,
 };
