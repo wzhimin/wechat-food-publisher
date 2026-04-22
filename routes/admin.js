@@ -258,7 +258,7 @@ router.post('/comments/reject', checkAuth, async (req, res) => {
 // GET /api/admin/recipes/list
 router.get('/recipes/list', checkAuth, async (req, res) => {
   try {
-    const { status = 'approved', isFeatured, search, page = 1, pageSize = 20, source } = req.query;
+    const { status = 'approved', isFeatured, search, page = 1, pageSize = 20, source, startDate, endDate } = req.query;
     const where = {};
     if (status !== 'all') where.status = status;
     if (isFeatured !== undefined) where.is_featured = isFeatured === '1' || isFeatured === 'true';
@@ -269,6 +269,15 @@ router.get('/recipes/list', checkAuth, async (req, res) => {
       where[Op.or] = [
         { title: { [Op.like]: `%${search.trim()}%` } },
       ];
+    }
+    // 时间范围筛选
+    if (startDate) {
+      where.created_at = { ...where.created_at, [Op.gte]: new Date(startDate) };
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      where.created_at = { ...where.created_at, [Op.lte]: end };
     }
     
     const offset = (parseInt(page) - 1) * parseInt(pageSize);

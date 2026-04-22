@@ -260,6 +260,10 @@
         <option value="1">已精选</option>
         <option value="0">未精选</option>
       </select>
+      <label>时间：</label>
+      <input type="date" id="startDate" onchange="changeFilter()">
+      <span>至</span>
+      <input type="date" id="endDate" onchange="changeFilter()">
       <input type="text" id="searchInput" class="search-box" placeholder="搜索菜谱标题..." onkeyup="if(event.key==='Enter'){currentPage=1;loadRecipes()}">
       <button class="btn btn-primary" onclick="currentPage=1;loadRecipes()">搜索</button>
       <button class="btn btn-danger" onclick="clearSystemRecipes()">🗑️ 清空系统菜谱</button>
@@ -445,6 +449,10 @@
         if (source !== 'all') url += `&source=${source}`;
         if (featured !== 'all') url += `&isFeatured=${featured}`;
         if (search) url += `&search=${encodeURIComponent(search)}`;
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        if (startDate) url += `&startDate=${startDate}`;
+        if (endDate) url += `&endDate=${endDate}`;
         
         const res = await fetch(url);
         if (res.status === 401) {
@@ -776,7 +784,7 @@
     function formatDate(dateStr) {
       if (!dateStr) return '-';
       const d = new Date(dateStr);
-      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
     }
     
     function escapeHtml(str) {
