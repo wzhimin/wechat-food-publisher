@@ -817,4 +817,48 @@ router.get('/reports/stats', checkAuth, async (req, res) => {
   }
 });
 
+// POST /api/admin/run-script
+// 执行一次性脚本（补录历史选题等）
+const fs = require('fs');
+const path = require('path');
+
+router.post('/run-script', checkAuth, async (req, res) => {
+  const { script } = req.body;
+  if (!script) return res.status(400).json({ success: false, error: '缺少 script 参数' });
+
+  // 只允许运行已知脚本，防止注入
+  const allowed = {
+    'migrate-published-articles': path.join(__dirname, '../scripts/migrate-published-articles.js'),
+  };
+
+  const scriptPath = allowed[script];
+  if (!scriptPath) {
+    return res.status(400).json({ success: false, error: `未知脚本: ${script}` });
+  }
+
+  if (!fs.existsSync(scriptPath)) {
+    return res.status(404).json({ success: false, error: `脚本不存在: ${script}` });
+  }
+
+  try {
+    const { spawn } = require('child_process');
+    const node = process.execPath;
+    let stdout = '', stderr = '';
+
+    await new Promise((resolve, reject) => {
+      const child = spawn(node, [scriptPath], { env: { ...process.env } });
+      child.stdout.on('data', d => { stdout += d; });
+      child.stderr.on('data', d => { stderr += d; });
+      child.on('close', code => {
+        if (code === 0) resolve();
+        else reject(new Error(`exit ${code}: ${stderr || stdout}`));
+      });
+    });
+
+    res.json({ success: true, output: stdout });
+  } catch (e) {
+    res.json({ success: false, error: e.message, output: stdout });
+  }
+});
+
 module.exports = router;

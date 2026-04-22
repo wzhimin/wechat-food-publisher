@@ -129,7 +129,7 @@
 </div>
 
 <script>
-const API_BASE = ''; // 同域代理
+const API_BASE = window.location.origin + '/api';
 
 function getToken() { return localStorage.getItem('admin_token') || ''; }
 
@@ -138,7 +138,7 @@ async function loadData() {
   tb.innerHTML = '<tr><td colspan="6" class="empty">加载中…</td></tr>';
 
   try {
-    const resp = await fetch(`${API_BASE}/api/published/list?token=${getToken()}`);
+    const resp = await fetch(`${API_BASE}/published/list?token=${getToken()}`);
     const data = await resp.json();
 
     if (!data.success) {
@@ -191,7 +191,7 @@ async function deleteArticle(id, title) {
   if (!confirm(`确定删除「${title}」这条记录？\n删除后下次发布可能重复选到此主题。`)) return;
 
   try {
-    const resp = await fetch(`${API_BASE}/api/published/${id}?token=${getToken()}`, {
+    const resp = await fetch(`${API_BASE}/published/${id}?token=${getToken()}`, {
       method: 'DELETE'
     });
     const data = await resp.json();
@@ -215,7 +215,7 @@ async function migrateHistory() {
 
   try {
     // 通过服务端代理执行一次性脚本（避免跨域）
-    const resp = await fetch(`${API_BASE}/api/admin/run-script?token=${getToken()}`, {
+    const resp = await fetch(`${API_BASE}/admin/run-script?token=${getToken()}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ script: 'migrate-published-articles' })
