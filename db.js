@@ -105,23 +105,55 @@ async function init() {
     if (r2.affectedRows > 0) console.log(`[迁移] recipe_comments 旧 pending → approved (${r2.affectedRows} 条)`);
   } catch (e) { console.error('[迁移] recipe_comments status 修复出错:', e.message); }
 
-  // 第五步：同步 Counter 表
-  await Counter.sync({ alter: true });
+  // ⚠️ 严禁使用 sync({ alter: true })！
+  // Sequelize 的 alter 检查会触发 MySQL 索引统计，遇到 64 索引上限直接报错。
+  // 正确做法：检查表是否存在，不存在才创建；新字段用手动 ALTER 添加。
+  // 参见 commit 59c8566、ca91c22 的修复历史。
 
-  // 第六步：同步 admin_tokens 表（init 内 require 避免循环依赖）
+  // 第五步：同步 Counter 表（表存在就跳过）
+  const [counterTable] = await sequelize.query(`SHOW TABLES LIKE 'Counters'`);
+  if (counterTable.length === 0) {
+    await Counter.sync();
+    console.log('[sync] Counter 创建完成');
+  }
+
+  // 第六步：同步 admin_tokens 表（表存在就跳过）
   const AdminToken = require("./models/AdminToken");
-  await AdminToken.sync({ alter: true });
-  console.log('[sync] AdminToken 创建完成');
+  const [adminTokenTable] = await sequelize.query(`SHOW TABLES LIKE 'admin_tokens'`);
+  if (adminTokenTable.length === 0) {
+    await AdminToken.sync();
+    console.log('[sync] AdminToken 创建完成');
+  }
 
-  // 第七步：同步 published_articles 表
+  // 第七步：同步 published_articles 表（表存在就跳过）
   const PublishedArticle = require('./models/PublishedArticle');
-  await PublishedArticle.sync({ alter: true });
-  console.log('[sync] PublishedArticle 创建完成');
+  const [publishedArticleTable] = await sequelize.query(`SHOW TABLES LIKE 'published_articles'`);
+  if (publishedArticleTable.length === 0) {
+    await PublishedArticle.sync();
+    console.log('[sync] PublishedArticle 创建完成');
+  }
 
-  // 第八步：同步 Recipe 表（新字段 articleMd5、publishedArticleId）
+  // 第八步：同步 Recipe 表（表存在就跳过，新字段手动 ALTER）
   const Recipe = require('./models/Recipe');
-  await Recipe.sync({ alter: true });
-  console.log('[sync] Recipe 新字段同步完成');
+  const [recipeTable] = await sequelize.query(`SHOW TABLES LIKE 'recipes'`);
+  if (recipeTable.length === 0) {
+    await Recipe.sync();
+    console.log('[sync] Recipe 创建完成');
+  } else {
+    // 表已存在，手动添加新字段（articleMd5、publishedArticleId）
+    try {
+      const [recipeCols] = await sequelize.query(`SHOW COLUMNS FROM recipes`);
+      const colNames = recipeCols.map(c => c.Field);
+      if (!colNames.includes('article_md5')) {
+        await sequelize.query(`ALTER TABLE recipes ADD COLUMN article_md5 VARCHAR(32) DEFAULT NULL`);
+        console.log('[迁移] recipes.article_md5 已添加');
+      }
+      if (!colNames.includes('published_article_id')) {
+        await sequelize.query(`ALTER TABLE recipes ADD COLUMN published_article_id INT DEFAULT NULL`);
+        console.log('[迁移] recipes.published_article_id 已添加');
+      }
+    } catch (e) { console.error('[迁移] Recipe 新字段出错:', e.message); }
+  }
 
   // 第九步：确保 published_articles 表字符集为 utf8mb4（支持 emoji）
   try {
