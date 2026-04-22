@@ -5,51 +5,60 @@ const path = require('path');
 const crypto = require('crypto');
 const PublishedArticle = require('../models/PublishedArticle');
 
-// 管理员认证（复用 admin.js 的 TOKENS）
-// 已在 index.js 中通过 require('./routes/admin') 获取 TOKENS 并导出
-let _TOKENS = null;
-function setTokens(tokens) { _TOKENS = tokens; }
+// 管理员认证：直接调用 admin.js 导出的 verifyToken（token 存数据库，有降级兜底）
+// 不再依赖内存 Map 注入，避免 admin.js 改了 token 逻辑后 published.js 失效
+const AdminToken = require('../models/AdminToken');
 
 // record 接口共享密钥（cron 任务、补录脚本、后台页面均使用）
 const RECORD_SECRET = process.env.PUBLISHED_RECORD_SECRET || 'published_record_secret_2026';
 
+// 内联 verify（直接查数据库，与 admin.js 保持一致）
+async function verifyAdminToken(token) {
+  if (!token) return null;
+  try {
+    const record = await AdminToken.findOne({ where: { token } });
+    if (!record) return null;
+    if (new Date(record.expires_at) < new Date()) {
+      await record.destroy();
+      return null;
+    }
+    return { username: record.username, name: record.name };
+  } catch (e) {
+    // 表不存在时降级（首次部署），静默返回 null
+    return null;
+  }
+}
+
 function recordVerify(req, res, next) {
-  // 优先检查 secret（供 cron 任务 / 补录脚本 / 前端页面使用）
   const secret = req.query.secret || req.body.secret;
   if (secret === RECORD_SECRET) return next();
-  // 其次检查 admin token（后台页面 UI 登录态）
   const token = req.query.token || req.body.token ||
     (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ success: false, error: '未登录' });
-  if (!_TOKENS) return res.status(500).json({ success: false, error: '认证模块未初始化' });
-  const info = _TOKENS.get(token);
-  if (!info) return res.status(403).json({ success: false, error: '无权限' });
-  if (Date.now() > info.expires) {
-    _TOKENS.delete(token);
-    return res.status(403).json({ success: false, error: '登录已过期，请重新登录' });
-  }
-  next();
+  verifyAdminToken(token)
+    .then(info => {
+      if (!info) return res.status(403).json({ success: false, error: '无权限' });
+      req.adminUser = info;
+      next();
+    })
+    .catch(() => res.status(500).json({ success: false, error: '认证服务异常' }));
 }
 
-// 内部认证函数（由 initAuth 调用）
 function _verifyAdmin(req, res, next) {
   const token = req.query.token || req.body.token ||
     (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
   if (!token) return res.status(401).json({ success: false, error: '未登录' });
-  if (!_TOKENS) return res.status(500).json({ success: false, error: '认证模块未初始化' });
-  const info = _TOKENS.get(token);
-  if (!info) return res.status(403).json({ success: false, error: '无权限' });
-  if (Date.now() > info.expires) {
-    _TOKENS.delete(token);
-    return res.status(403).json({ success: false, error: '登录已过期，请重新登录' });
-  }
-  next();
+  verifyAdminToken(token)
+    .then(info => {
+      if (!info) return res.status(403).json({ success: false, error: '无权限' });
+      req.adminUser = info;
+      next();
+    })
+    .catch(() => res.status(500).json({ success: false, error: '认证服务异常' }));
 }
 
-// 从外部注入 TOKENS（由 index.js 调用）
-function initAuth(TOKENS) {
-  _TOKENS = TOKENS;
-}
+// initAuth 保留但已废弃（不再需要注入 TOKENS）
+function initAuth(TOKENS) { /* 已废弃，token 验证改走数据库 */ }
 
 module.exports = router;
 module.exports.initAuth = initAuth;

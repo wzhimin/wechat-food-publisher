@@ -892,3 +892,4 @@ router.post('/run-script', checkAuth, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.verifyToken = verifyToken;

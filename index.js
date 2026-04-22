@@ -694,14 +694,6 @@ app.use('/api/follow', followRouter);
 app.use('/api/report', reportRouter);
 app.use('/api/published', publishedRouter);
 
-// 将 admin.js 的 TOKENS 注入 published.js（解决循环 require 问题）
-if (publishedRouter.initAuth) {
-  // 直接取 require('admin') 的 module.exports.TOKENS（避免 adminRouter 引用问题）
-  const adminModule = require('./routes/admin');
-  publishedRouter.initAuth(adminModule.TOKENS);
-  console.log('[auth] publishedRouter 认证模块初始化完成');
-}
-
 const port = process.env.PORT || 80;
 
 // ========== 启动 ==========
