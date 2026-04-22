@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
 const { sequelize: dbSeq } = require('../db');
