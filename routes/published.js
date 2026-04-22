@@ -10,6 +10,27 @@ const PublishedArticle = require('../models/PublishedArticle');
 let _TOKENS = null;
 function setTokens(tokens) { _TOKENS = tokens; }
 
+// record 接口共享密钥（cron 任务、补录脚本、后台页面均使用）
+const RECORD_SECRET = process.env.PUBLISHED_RECORD_SECRET || 'published_record_secret_2026';
+
+function recordVerify(req, res, next) {
+  // 优先检查 secret（供 cron 任务 / 补录脚本 / 前端页面使用）
+  const secret = req.query.secret || req.body.secret;
+  if (secret === RECORD_SECRET) return next();
+  // 其次检查 admin token（后台页面 UI 登录态）
+  const token = req.query.token || req.body.token ||
+    (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(401).json({ success: false, error: '未登录' });
+  if (!_TOKENS) return res.status(500).json({ success: false, error: '认证模块未初始化' });
+  const info = _TOKENS.get(token);
+  if (!info) return res.status(403).json({ success: false, error: '无权限' });
+  if (Date.now() > info.expires) {
+    _TOKENS.delete(token);
+    return res.status(403).json({ success: false, error: '登录已过期，请重新登录' });
+  }
+  next();
+}
+
 // 内部认证函数（由 initAuth 调用）
 function _verifyAdmin(req, res, next) {
   const token = req.query.token || req.body.token ||
@@ -94,7 +115,7 @@ async function fetchLocalTopics() {
 // GET /api/published/list
 // 查询已发布文章列表（后台管理用）
 // ============================================================
-router.get('/list', _verifyAdmin, async (req, res) => {
+router.get('/list', recordVerify, async (req, res) => {
   try {
     const articles = await PublishedArticle.findAll({
       order: [['published_at', 'DESC']],
@@ -126,7 +147,7 @@ router.get('/topics', async (req, res) => {
 // POST /api/published/record
 // 记录一篇已发布的文章（发布成功后调用）
 // ============================================================
-router.post('/record', _verifyAdmin, async (req, res) => {
+router.post('/record', recordVerify, async (req, res) => {
   const { title, topic, draft_id, published_at } = req.body;
 
   if (!title) {
@@ -167,7 +188,7 @@ router.post('/record', _verifyAdmin, async (req, res) => {
 // DELETE /api/published/:id
 // 删除一条记录（后台管理用）
 // ============================================================
-router.delete('/:id', _verifyAdmin, async (req, res) => {
+router.delete('/:id', recordVerify, async (req, res) => {
   try {
     await PublishedArticle.destroy({ where: { id: req.params.id } });
     res.json({ success: true });
