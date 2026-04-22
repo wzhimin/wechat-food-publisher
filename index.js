@@ -187,11 +187,28 @@ function stripHtml(html) {
 // ========== 菜谱同步接口 ==========
 // POST /api/recipe/sync
 // 公众号发布后，将 markdown 原文中的菜谱同步入库
-// Body: { markdown, articleId? }
+// Body: { markdown, articleId?, topic? }
 app.post('/api/recipe/sync', async (req, res) => {
   try {
-    const { markdown, articleId } = req.body;
+    const { markdown, articleId, topic } = req.body;
     if (!markdown) return res.status(400).json({ error: '缺少 markdown' });
+
+    // 从 front matter 提取 title，计算 MD5 关联 published_articles
+    let articleMd5 = null;
+    let resolvedPublishedArticleId = null;
+    const titleMatch = markdown.match(/^title:\s*["']?(.+?)["']?\s*$/m);
+    if (titleMatch) {
+      const mdTitle = titleMatch[1].trim();
+      const mdTopic = topic || '';
+      articleMd5 = crypto.createHash('md5').update(`${mdTitle}|${mdTopic}`).digest('hex');
+      // 先按精确 MD5 查，查不到再按 title 模糊匹配
+      let pa = await PublishedArticle.findOne({ where: { article_md5: articleMd5 } });
+      if (!pa) {
+        pa = await PublishedArticle.findOne({ where: { title: mdTitle } });
+        if (pa) articleMd5 = pa.article_md5;
+      }
+      if (pa) resolvedPublishedArticleId = pa.id;
+    }
 
     const recipes = parseMarkdownRecipes(markdown, {
       cover: null,
@@ -204,9 +221,31 @@ app.post('/api/recipe/sync', async (req, res) => {
     }
 
     const created = await Recipe.bulkCreate(recipes, {
-      updateOnDuplicate: ['ingredients', 'steps', 'tips', 'tags', 'season', 'difficulty', 'duration', 'cover', 'updatedAt'],
+      updateOnDuplicate: [
+        'ingredients', 'steps', 'tips', 'tags', 'season',
+        'difficulty', 'duration', 'cover', 'updatedAt',
+        'articleMd5', 'publishedArticleId',
+      ],
     });
-    console.log(`[菜谱同步] 处理 ${recipes.length} 道菜（新增+更新）：${recipes.map(r => r.title).join(', ')}`);
+
+    // bulkCreate updateOnDuplicate 只对已存在且匹配 where 条件的行生效，
+    // 但 where 条件是 title，所以需要额外补一次关联（已存在但关联为空的）
+    if (articleMd5 && resolvedPublishedArticleId) {
+      await Recipe.update(
+        { articleMd5, publishedArticleId: resolvedPublishedArticleId },
+        {
+          where: {
+            title: recipes.map(r => r.title),
+            [require('sequelize').Op.or]: [
+              { articleMd5: null },
+              { publishedArticleId: null },
+            ],
+          },
+        },
+      );
+    }
+
+    console.log(`[菜谱同步] 处理 ${recipes.length} 道菜，articleMd5=${articleMd5 || '无'}，publishedArticleId=${resolvedPublishedArticleId || '无'}：${recipes.map(r => r.title).join(', ')}`);
     res.json({ success: true, count: recipes.length, data: created });
 
     // 异步补全封面

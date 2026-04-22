@@ -7,13 +7,15 @@
  *   node scripts/resync-all-recipes.js [--base-url http://localhost:3000] [--secret <secret>] [--dry-run]
  *
  * 流程：
- *   1. GET /api/published/list   — 获取已有关联（用于判断 article_md5 是否已存在）
+ *   1. GET /api/published/list   — 获取已有的 published_articles，建立 title -> article_md5 映射
  *   2. 遍历 articles/ 下所有 MD 文件
  *      2a. 提取标题（优先 front matter title:，否则 H1 heading）
- *      2b. 计算 article_md5 = MD5("标题|")（与后端一致）
- *      2c. POST /api/published/record  upsert PublishedArticle（幂等，已存在返回 skipped）
- *      2d. POST /api/recipe/parse       同步菜谱（findOrCreate，已存在则跳过）
+ *      2b. 按 title 查已有映射，命中则复用 article_md5 和 id，否则新建
+ *      2c. POST /api/recipe/parse       同步菜谱（findOrCreate，已存在则跳过）
  *   3. 打印汇总报告
+ *
+ * 关键修复：之前 topic 传空字符串导致 MD5(title|) 和发布时的 MD5(title|真实topic) 对不上，
+ * 现在改为直接从服务器已有记录反查 title 匹配，避免 MD5 不一致问题。
  */
 
 const https = require('https');
@@ -118,17 +120,17 @@ async function main() {
   console.log(`   Base URL: ${BASE_URL}`);
   console.log(`   Articles: ${ARTICLES_DIR}\n`);
 
-  // Step 1: 获取已有关联（现有 article_md5 列表）
-  console.log('📡 拉取已有关联记录...');
-  let existingMd5Set = new Set();
+  // Step 1: 获取已有的 published_articles，建立 title -> { id, article_md5 } 映射
+  console.log('📡 拉取已有的 published_articles 记录...');
+  const titleMap = new Map(); // title -> { id, article_md5 }
   try {
     const listRes = await get(`${BASE_URL}/api/published/list?secret=${SECRET}`);
     if (listRes.success && listRes.data) {
-      listRes.data.forEach(a => existingMd5Set.add(a.article_md5));
-      console.log(`   已有 ${existingMd5Set.size} 条 PublishedArticle，列表已加载`);
+      listRes.data.forEach(a => titleMap.set(a.title, { id: a.id, article_md5: a.article_md5 }));
+      console.log(`   已有 ${titleMap.size} 条 PublishedArticle，按 title 索引`);
     }
   } catch (e) {
-    console.warn(`   ⚠️ 拉取失败，继续（将跳过 article_md5 判断）: ${e.message}`);
+    console.warn(`   ⚠️ 拉取失败，继续（将无法关联已有记录）: ${e.message}`);
   }
 
   // Step 2: 遍历所有 MD 文件
@@ -142,13 +144,11 @@ async function main() {
     const content = fs.readFileSync(filePath, 'utf-8');
     const title = extractTitle(content);
     const dateStr = extractDateFromFilename(filename);
-    const articleMd5 = computeArticleMd5(title || filename);
     const publishedAt = dateStr ? new Date(dateStr).toISOString() : undefined;
 
     const recipeCount = (content.match(/## 💕/g) || []).length;
     console.log(`[${filename}]`);
     console.log(`   标题: ${title || '(无标题)'}`);
-    console.log(`   article_md5: ${articleMd5}`);
     console.log(`   菜谱数: ${recipeCount}`);
 
     if (DRY_RUN) {
@@ -157,38 +157,62 @@ async function main() {
       continue;
     }
 
-    // Step 2a: upsert PublishedArticle（幂等）
-    try {
-      const recRes = await post(`${BASE_URL}/api/published/record?secret=${SECRET}`, {
-        title: title || filename,
-        topic: '',
-        draft_id: '',
-        article_md5: articleMd5,
-        published_at: publishedAt,
-      });
-      if (recRes.success) {
-        console.log(`   ${recRes.skipped ? '⏭️ 已存在（跳过）' : '✅ PublishedArticle 新增'}`);
-        stats.upserted++;
-      } else {
-        console.warn(`   ⚠️ PublishedArticle 失败: ${recRes.error}`);
+    // Step 2a: 从服务器已有记录中查找 title 匹配，复用正确的 article_md5
+    let articleMd5 = null;
+    let publishedArticleId = null;
+    const existing = titleMap.get(title);
+    if (existing) {
+      articleMd5 = existing.article_md5;
+      publishedArticleId = existing.id;
+      console.log(`   📎 匹配已有记录: id=${publishedArticleId}, md5=${articleMd5}`);
+    } else if (title) {
+      // title 不存在，计算 MD5 并新建 PublishedArticle
+      articleMd5 = computeArticleMd5(title);
+      try {
+        const recRes = await post(`${BASE_URL}/api/published/record?secret=${SECRET}`, {
+          title,
+          topic: '',
+          draft_id: '',
+          article_md5: articleMd5,
+          published_at: publishedAt,
+        });
+        if (recRes.success) {
+          if (recRes.skipped) {
+            // 已存在但 titleMap 没命中（可能 title 不同但 md5 相同）
+            // 用返回的 id 和 md5
+            publishedArticleId = recRes.id;
+            articleMd5 = recRes.article_md5 || articleMd5;
+            console.log(`   ⏭️  PublishedArticle 已存在 (id=${publishedArticleId})`);
+          } else {
+            // 新建成功，record 接口直接返回了 id
+            publishedArticleId = recRes.id;
+            console.log(`   ✅ PublishedArticle 新增 (id=${publishedArticleId})`);
+            stats.upserted++;
+          }
+          // 更新 titleMap
+          titleMap.set(title, { id: publishedArticleId, article_md5: articleMd5 });
+        } else {
+          console.warn(`   ⚠️ PublishedArticle 失败: ${recRes.error}`);
+        }
+      } catch (e) {
+        console.error(`   ❌ PublishedArticle 接口失败: ${e.message}`);
+        stats.errors++;
+        continue;
       }
-    } catch (e) {
-      console.error(`   ❌ PublishedArticle 接口失败: ${e.message}`);
-      stats.errors++;
-      continue;
     }
 
-    // Step 2b: sync recipes（传 articleMd5，由后端自动补 publishedArticleId）
+    // Step 2b: sync recipes（传正确的 articleMd5 和 publishedArticleId）
     try {
       const syncRes = await post(`${BASE_URL}/api/recipe/parse`, {
         markdown: content,
-        articleId: articleMd5,   // MD5 存 articleId 供查重
-        articleMd5: articleMd5,  // 关联 published_articles
+        articleId: articleMd5,
+        articleMd5: articleMd5,
+        publishedArticleId,
         publishedAt,
       });
       if (syncRes.success) {
         const count = syncRes.count || 0;
-        console.log(`   ✅ 菜谱同步 ${count} 道`);
+        console.log(`   ✅ 菜谱同步 ${count} 道，publishedArticleId=${publishedArticleId || '无'}`);
         stats.synced += count;
       } else {
         console.warn(`   ⚠️ 菜谱同步失败: ${syncRes.error}`);

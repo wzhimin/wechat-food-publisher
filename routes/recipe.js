@@ -240,7 +240,7 @@ router.post('/parse', async (req, res) => {
     const created = [];
     for (const r of recipes) {
       const [instance, isNew] = await Recipe.findOrCreate({
-        where: { title: r.title, articleId: r.articleId || null },
+        where: { title: r.title },
         defaults: {
           ...r,
           articleId: r.articleId || null,

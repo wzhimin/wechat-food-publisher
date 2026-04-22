@@ -150,10 +150,10 @@ router.post('/record', recordVerify, async (req, res) => {
   try {
     const existing = await PublishedArticle.findOne({ where: { article_md5 } });
     if (existing) {
-      return res.json({ success: true, skipped: true, source: 'server' });
+      return res.json({ success: true, skipped: true, id: existing.id, article_md5: existing.article_md5, source: 'server' });
     }
 
-    await PublishedArticle.create({
+    const record = await PublishedArticle.create({
       title,
       topic: topic || '',
       draft_id: draft_id || '',
@@ -162,7 +162,7 @@ router.post('/record', recordVerify, async (req, res) => {
     });
 
     console.log(`[published] 记录成功: ${title}`);
-    res.json({ success: true, skipped: false, source: 'server' });
+    res.json({ success: true, skipped: false, id: record.id, article_md5, source: 'server' });
   } catch (e) {
     console.error('[published/record]', e.message);
     try {
