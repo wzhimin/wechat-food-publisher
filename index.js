@@ -19,6 +19,7 @@ const RecipeLike = require('./models/RecipeLike');
 const RecipeComment = require('./models/RecipeComment');
 const UserFollow = require('./models/UserFollow');
 const Report = require('./models/Report');
+const PublishedArticle = require('./models/PublishedArticle');
 
 // ========== 小程序接口路由 ==========
 const userRouter = require('./routes/user');
@@ -36,6 +37,7 @@ const likeRouter = require('./routes/like');
 const commentRouter = require('./routes/comment');
 const followRouter = require('./routes/follow');
 const reportRouter = require('./routes/report');
+const publishedRouter = require('./routes/published');
 
 const app = express();
 app.use(express.json({ limit: '20mb' }));
@@ -690,6 +692,7 @@ app.use('/api/like', likeRouter);
 app.use('/api/comment', commentRouter);
 app.use('/api/follow', followRouter);
 app.use('/api/report', reportRouter);
+app.use('/api/published', publishedRouter);
 
 const port = process.env.PORT || 80;
 

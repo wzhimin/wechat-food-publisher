@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 /**
- * 菜谱封面图批量补充工具
+ * 菜谱封面图批量补充工具 V2
  * 
- * 策略：Pixabay 搜索 → 智能降级（别名/食材/英文关键词）
+ * 策略：通义万相 AI 生成 → Pixabay 搜索 → 智能降级（别名/食材/英文关键词）
  * 通过云端 HTTP API 更新数据库
  * 
  * 用法:
  *   node scripts/fill-recipe-covers.js
  *   node scripts/fill-recipe-covers.js --dry-run    # 只搜索不更新
  *   node scripts/fill-recipe-covers.js --limit=20   # 只处理前20条
+ *   node scripts/fill-recipe-covers.js --no-ai      # 跳过AI生成，只用Pixabay
  * 
  * 也可作为模块导入：
  *   const { fillCoversForRecipes } = require('./scripts/fill-recipe-covers');
@@ -16,9 +17,11 @@
  */
 
 const https = require('https');
+const http = require('http');
 
 // ========== 配置 ==========
 const PIXABAY_API_KEY = '55448016-5bb57529981c9058bfeb1153c';
+const DASHSCOPE_API_KEY = 'sk-e008ef57b56c449ba413e954c4a63edd'; // 通义万相（百炼平台）
 const API_BASE = process.env.API_BASE || 'https://express-yi42-246142-8-1421971309.sh.run.tcloudbase.com';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -63,6 +66,108 @@ function httpPost(path, body) {
   });
 }
 
+// ========== 通义万相 AI 图片生成 ==========
+async function generateWithWanxiang(title) {
+  const prompt = `一张高清美食照片，${title}，家常中餐，色泽鲜亮，热气腾腾，自然光，写实风格，细节丰富`;
+  
+  return new Promise((resolve) => {
+    const payload = JSON.stringify({
+      model: 'wanx-v1',
+      input: { prompt },
+      parameters: { n: 1, size: '1024*1024' }
+    });
+    
+    const opts = {
+      hostname: 'dashscope.aliyuncs.com',
+      path: '/api/v1/services/aigc/text2image/image-synthesis',
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${DASHSCOPE_API_KEY}`,
+        'Content-Type': 'application/json',
+        'X-DashScope-Async': 'enable'
+      }
+    };
+    
+    const req = https.request(opts, res => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', async () => {
+        try {
+          const json = JSON.parse(data);
+          const taskId = json.output?.task_id;
+          if (!taskId) {
+            console.log(`[AI生成] 提交失败: ${JSON.stringify(json)}`);
+            resolve(null);
+            return;
+          }
+          
+          // 轮询结果
+          const imageUrl = await pollWanxiangTask(taskId);
+          if (imageUrl) {
+            resolve({ url: imageUrl, source: '通义万相', photographer: 'AI生成' });
+          } else {
+            resolve(null);
+          }
+        } catch (e) {
+          console.log(`[AI生成] 解析失败: ${e.message}`);
+          resolve(null);
+        }
+      });
+    });
+    
+    req.on('error', (e) => {
+      console.log(`[AI生成] 请求失败: ${e.message}`);
+      resolve(null);
+    });
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function pollWanxiangTask(taskId, maxRetries = 30) {
+  for (let i = 0; i < maxRetries; i++) {
+    await sleep(3000);
+    
+    const result = await new Promise((resolve) => {
+      const opts = {
+        hostname: 'dashscope.aliyuncs.com',
+        path: `/api/v1/tasks/${taskId}`,
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${DASHSCOPE_API_KEY}`
+        }
+      };
+      
+      const req = https.request(opts, res => {
+        let data = '';
+        res.on('data', chunk => { data += chunk; });
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); } catch { resolve(null); }
+        });
+      });
+      req.on('error', () => resolve(null));
+      req.end();
+    });
+    
+    if (!result) continue;
+    
+    const status = result.output?.task_status;
+    if (status === 'SUCCEEDED') {
+      const url = result.output?.results?.[0]?.url;
+      if (url) {
+        // 下载图片并转为 base64 或直接返回 URL
+        return url; // 先返回 URL，后续可考虑下载到自己的存储
+      }
+    } else if (status === 'FAILED') {
+      console.log(`[AI生成] 任务失败: ${result.output?.message}`);
+      return null;
+    }
+  }
+  
+  console.log(`[AI生成] 超时`);
+  return null;
+}
+
 // ========== 搜索关键词映射 ==========
 const ALIAS_MAP = {
   // 常见别名
@@ -73,7 +178,7 @@ const ALIAS_MAP = {
   '可乐鸡翅': '可乐鸡翅 chicken wings',
   '糖醋里脊': '糖醋肉',
   
-  // 食材别名（关键改进）
+  // 食材别名
   '蒜苔': '蒜薹',
   '蒜台': '蒜薹',
   '苔菜': '蒜薹',
@@ -148,7 +253,6 @@ const EN_MAP = {
   '鸡汤': 'chicken soup',
   '冬瓜排骨汤': 'winter melon pork rib soup',
   '萝卜排骨汤': 'radish pork rib soup',
-  // 新增英文关键词
   '蒜薹': 'garlic scapes chinese',
   '蒜苔': 'garlic scapes',
   '四季豆': 'green beans chinese',
@@ -219,8 +323,20 @@ async function searchPixabay(query) {
   });
 }
 
-// 智能搜索：逐级降级
-async function findCoverImage(title) {
+// 智能搜索：AI生成 → Pixabay逐级降级
+async function findCoverImage(title, useAI = true) {
+  // 1. 先尝试 AI 生成
+  if (useAI) {
+    console.log(`    🤖 尝试 AI 生成...`);
+    const aiResult = await generateWithWanxiang(title);
+    if (aiResult) {
+      console.log(`    ✅ AI 生成成功`);
+      return aiResult;
+    }
+    console.log(`    ⚠️  AI 生成失败，降级到 Pixabay`);
+  }
+  
+  // 2. Pixabay 搜索
   const keywords = generateKeywords(title);
   for (const { kw, label } of keywords) {
     const result = await searchPixabay(kw);
@@ -237,11 +353,11 @@ async function findCoverImage(title) {
 /**
  * 为指定菜谱列表补全封面
  * @param {Array} recipes - 菜谱列表，每项需包含 { id, title, cover? }
- * @param {Object} options - { dryRun?: boolean, delayMs?: number }
+ * @param {Object} options - { dryRun?: boolean, delayMs?: number, useAI?: boolean }
  * @returns {Object} { success: number, failed: number, failedTitles: string[] }
  */
 async function fillCoversForRecipes(recipes, options = {}) {
-  const { dryRun = false, delayMs = 1200 } = options;
+  const { dryRun = false, delayMs = 1200, useAI = true } = options;
   
   if (!recipes || recipes.length === 0) {
     return { success: 0, failed: 0, failedTitles: [] };
@@ -255,6 +371,7 @@ async function fillCoversForRecipes(recipes, options = {}) {
   }
 
   console.log(`[补封面] 开始处理 ${noCover.length} 道无封面菜谱`);
+  console.log(`[补封面] 图片来源: ${useAI ? '通义万相 AI → Pixabay' : 'Pixabay'}`);
   
   let success = 0, failed = 0;
   const failedTitles = [];
@@ -263,10 +380,10 @@ async function fillCoversForRecipes(recipes, options = {}) {
     const recipe = noCover[i];
     console.log(`[补封面] [${i + 1}/${noCover.length}] ${recipe.title}`);
 
-    const result = await findCoverImage(recipe.title);
+    const result = await findCoverImage(recipe.title, useAI);
 
     if (result) {
-      console.log(`[补封面]     ✅ ${result.url.slice(0, 60)}...`);
+      console.log(`[补封面]     ✅ ${result.source}: ${result.url.slice(0, 50)}...`);
 
       if (!dryRun) {
         try {
@@ -307,17 +424,20 @@ async function fillCoversForRecipes(recipes, options = {}) {
 // ========== CLI 入口 ==========
 async function main() {
   console.log('═══════════════════════════════════════');
-  console.log('  味口小程序 - 菜谱封面图批量补充工具');
+  console.log('  味口小程序 - 菜谱封面图批量补充工具 V2');
   console.log('═══════════════════════════════════════\n');
 
   // 解析命令行参数
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
+  const noAI = args.includes('--no-ai');
   const limit = parseInt(args.find(a => a.startsWith('--limit='))?.split('=')[1]) || 50;
 
   console.log(`✅ Pixabay API Key: 已配置`);
+  console.log(`✅ 通义万相 API Key: ${DASHSCOPE_API_KEY.slice(0, 10)}...`);
   console.log(`📡 后端地址: ${API_BASE}`);
   console.log(`🔧 模式: ${dryRun ? '试运行' : '正式模式'}`);
+  console.log(`🤖 AI生成: ${noAI ? '关闭' : '开启'}`);
   console.log(`📊 批次大小: ${limit}\n`);
 
   // 拉取菜谱列表
@@ -339,7 +459,7 @@ async function main() {
     process.exit(0);
   }
 
-  const result = await fillCoversForRecipes(batch, { dryRun, delayMs: 1200 });
+  const result = await fillCoversForRecipes(batch, { dryRun, delayMs: 1500, useAI: !noAI });
 
   console.log('\n═══════════════════════════════════════');
   console.log('📋 结果汇总');
@@ -350,7 +470,7 @@ async function main() {
   if (result.failedTitles.length > 0) {
     console.log(`\n未找到图片的菜谱:`);
     result.failedTitles.forEach((t, i) => console.log(`  ${i + 1}. ${t}`));
-    console.log('\n💡 建议: AI 生成或手动添加');
+    console.log('\n💡 建议: 手动添加封面图');
   }
 
   if (dryRun) {
@@ -359,7 +479,7 @@ async function main() {
 }
 
 // 导出函数供其他模块调用
-module.exports = { fillCoversForRecipes, findCoverImage };
+module.exports = { fillCoversForRecipes, findCoverImage, generateWithWanxiang };
 
 // 如果直接运行脚本
 if (require.main === module) {
