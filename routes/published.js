@@ -5,6 +5,29 @@ const path = require('path');
 const crypto = require('crypto');
 const PublishedArticle = require('../models/PublishedArticle');
 
+// 管理员认证（复用 admin.js 的 checkAuth 逻辑：支持 Bearer header 和 query token）
+function verifyAdmin(req, res, next) {
+  const token = req.query.token || req.body.token ||
+    (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(401).json({ success: false, error: '未登录' });
+  // 复用 admin.js 的 TOKENS Map（通过模块引用）
+  try {
+    const { TOKENS } = require('./admin');
+    const info = TOKENS.get(token);
+    if (!info) return res.status(403).json({ success: false, error: '无权限' });
+    if (Date.now() > info.expires) {
+      TOKENS.delete(token);
+      return res.status(403).json({ success: false, error: '登录已过期，请重新登录' });
+    }
+  } catch (e) {
+    return res.status(500).json({ success: false, error: '认证模块加载失败' });
+  }
+  next();
+}
+
+// /topics 允许公开发布端调用（cron 任务无 token），不加认证
+// /list、/record、/:id 需管理员认证
+
 // 腾讯云托管上的接口地址（开放接口服务，无需 token）
 const BASE_URL = 'https://express-yi42-246142-8-1421971309.sh.run.tcloudbase.com';
 
@@ -61,24 +84,21 @@ async function fetchLocalTopics() {
   return topics;
 }
 
-/**
- * 合并服务器 + 本地选题，去重返回
- */
-async function getAllTopics() {
-  const [serverTopics, localTopics] = await Promise.all([
-    fetchServerTopics(),
-    fetchLocalTopics(),
-  ]);
-
-  const map = new Map();
-  if (serverTopics) {
-    serverTopics.forEach(t => map.set(t, 'server'));
+// ============================================================
+// GET /api/published/list
+// 查询已发布文章列表（后台管理用）
+// ============================================================
+router.get('/list', verifyAdmin, async (req, res) => {
+  try {
+    const articles = await PublishedArticle.findAll({
+      order: [['published_at', 'DESC']],
+    });
+    res.json({ success: true, articles });
+  } catch (e) {
+    console.error('[published/list]', e.message);
+    res.status(500).json({ success: false, error: e.message });
   }
-  if (localTopics) {
-    localTopics.forEach(t => map.set(t, 'local'));
-  }
-  return map;
-}
+});
 
 // ============================================================
 // GET /api/published/topics
@@ -86,7 +106,6 @@ async function getAllTopics() {
 // ============================================================
 router.get('/topics', async (req, res) => {
   try {
-    // 先查服务器，失败降级本地
     const serverTopics = await fetchServerTopics();
     const topics = serverTopics || await fetchLocalTopics();
     res.json({ success: true, topics: topics || [], source: serverTopics ? 'server' : 'local' });
@@ -100,45 +119,54 @@ router.get('/topics', async (req, res) => {
 // POST /api/published/record
 // 记录一篇已发布的文章（发布成功后调用）
 // ============================================================
-router.post('/record', async (req, res) => {
-  const { title, topic, draft_id } = req.body;
+router.post('/record', verifyAdmin, async (req, res) => {
+  const { title, topic, draft_id, published_at } = req.body;
 
   if (!title) {
     return res.json({ success: false, error: 'title 必填' });
   }
 
-  // 计算内容 MD5（用标题+主题作为 proxy）
   const content = `${title}|${topic || ''}`;
   const article_md5 = crypto.createHash('md5').update(content).digest('hex');
 
   try {
-    // 先尝试在服务器上查重
     const existing = await PublishedArticle.findOne({ where: { article_md5 } });
     if (existing) {
-      console.log(`[published] 选题已存在，跳过记录: ${title}`);
       return res.json({ success: true, skipped: true, source: 'server' });
     }
 
-    // 写入本地数据库
     await PublishedArticle.create({
       title,
       topic: topic || '',
       draft_id: draft_id || '',
       article_md5,
-      published_at: new Date(),
+      published_at: published_at ? new Date(published_at) : new Date(),
     });
 
     console.log(`[published] 记录成功: ${title}`);
     res.json({ success: true, skipped: false, source: 'server' });
   } catch (e) {
     console.error('[published/record]', e.message);
-    // 数据库写入失败时只记录到本地文件，不阻塞发布流程
     try {
       const recordFile = path.join(LOCAL_ARTICLES_DIR, '版权记录.md');
       const entry = `\n## ${new Date().toLocaleDateString('zh-CN')} - ${title}\n`;
       fs.appendFileSync(recordFile, entry, 'utf-8');
     } catch (e2) { /* 忽略 */ }
     res.json({ success: false, error: e.message });
+  }
+});
+
+// ============================================================
+// DELETE /api/published/:id
+// 删除一条记录（后台管理用）
+// ============================================================
+router.delete('/:id', verifyAdmin, async (req, res) => {
+  try {
+    await PublishedArticle.destroy({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[published/delete]', e.message);
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 

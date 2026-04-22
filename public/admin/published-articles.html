@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>选题记录 - 味口后台</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f7fa;
+      min-height: 100vh;
+    }
+    .sidebar {
+      position: fixed;
+      left: 0; top: 0;
+      width: 220px; height: 100vh;
+      background: #2c3e50;
+      color: white;
+      padding: 20px 0;
+    }
+    .sidebar h2 { padding: 0 20px 20px; font-size: 18px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .sidebar a { display: block; padding: 12px 20px; color: rgba(255,255,255,0.8); text-decoration: none; }
+    .sidebar a:hover, .sidebar a.active { background: rgba(255,255,255,0.1); color: white; }
+    .sidebar .logout { position: absolute; bottom: 20px; width: 100%; padding: 12px 20px; color: rgba(255,255,255,0.6); cursor: pointer; }
+    .sidebar .logout:hover { color: white; }
+    .main-content { margin-left: 220px; padding: 30px; }
+    .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+    .page-header h1 { font-size: 24px; color: #2c3e50; }
+    .page-header p { color: #888; font-size: 14px; margin-top: 4px; }
+    .toolbar { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .btn-primary { background: #3498db; color: white; }
+    .btn-primary:hover { background: #2980b9; }
+    .btn-success { background: #27ae60; color: white; }
+    .btn-success:hover { background: #1e8449; }
+    .btn-danger { background: #e74c3c; color: white; }
+    .btn-danger:hover { background: #c0392b; }
+    .btn-gray { background: #95a5a6; color: white; }
+    .btn-gray:hover { background: #7f8c8d; }
+    .search-input {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      width: 240px;
+    }
+    table { width: 100%; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-collapse: collapse; }
+    th { background: #f8f9fa; padding: 14px 16px; text-align: left; font-size: 13px; color: #666; font-weight: 500; border-bottom: 1px solid #eee; }
+    td { padding: 14px 16px; border-bottom: 1px solid #f0f0f0; font-size: 14px; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+    .title-cell { max-width: 400px; font-weight: 500; color: #2c3e50; }
+    .topic-cell { color: #888; font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .date-cell { color: #888; font-size: 13px; white-space: nowrap; }
+    .draft-cell { font-family: monospace; color: #888; font-size: 12px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; background: #e8f5e9; color: #27ae60; }
+    .empty { text-align: center; padding: 60px; color: #aaa; }
+    .empty img { width: 64px; margin-bottom: 16px; opacity: 0.5; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; font-size: 14px; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .toast-success { background: #27ae60; color: white; }
+    .toast-error { background: #e74c3c; color: white; }
+    .info-box { background: #e8f4fd; border: 1px solid #b8daff; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-size: 13px; color: #2c3e50; }
+    .info-box strong { color: #1976d2; }
+    .count-tag { background: #ecf0f1; padding: 2px 8px; border-radius: 10px; font-size: 12px; color: #666; margin-left: 8px; }
+  </style>
+</head>
+<body>
+
+<!-- 侧边栏 -->
+<div class="sidebar">
+  <h2>味口后台</h2>
+  <a href="index.html">概览</a>
+  <a href="comments.html">评论管理</a>
+  <a href="recipes.html">菜谱管理</a>
+  <a href="feedbacks.html">用户反馈</a>
+  <a href="users.html">用户管理</a>
+  <a href="non-dishes.html">非菜谱清理</a>
+  <a href="reports.html">举报管理</a>
+  <a href="published-articles.html" class="active">选题记录</a>
+  <div class="logout" onclick="logout()">退出登录</div>
+</div>
+
+<!-- 主内容 -->
+<div class="main-content">
+  <div class="page-header">
+    <div>
+      <h1>选题记录</h1>
+      <p>公众号已发布文章历史，用于发布前查重避免重复选题</p>
+    </div>
+    <div style="text-align:right">
+      <button class="btn btn-success" onclick="migrateHistory()">补录历史文章</button>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <strong>数据来源：</strong>优先从服务器数据库查询；服务器不可用时降级扫描本地 <code>~/Desktop/wzmmaven/weikou/articles/</code> 目录。
+    选题重复判断以标题精确匹配为准。
+  </div>
+
+  <div class="toolbar">
+    <input type="text" class="search-input" placeholder="搜索标题或主题…" oninput="filterTable(this.value)">
+    <button class="btn btn-gray" onclick="loadData()">刷新</button>
+    <span class="count-tag" id="countTag">共 0 条</span>
+  </div>
+
+  <table id="articleTable">
+    <thead>
+      <tr>
+        <th style="width:40px">#</th>
+        <th>文章标题</th>
+        <th>主题</th>
+        <th>发布时间</th>
+        <th>草稿ID</th>
+        <th style="width:80px">操作</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+      <tr><td colspan="6" class="empty">加载中…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const API_BASE = ''; // 同域代理
+
+function getToken() { return localStorage.getItem('admin_token') || ''; }
+
+async function loadData() {
+  const tb = document.getElementById('tableBody');
+  tb.innerHTML = '<tr><td colspan="6" class="empty">加载中…</td></tr>';
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/published/list`, {
+      headers: { 'Authorization': getToken() }
+    });
+    const data = await resp.json();
+
+    if (!data.success) {
+      tb.innerHTML = `<tr><td colspan="6" class="empty">加载失败：${data.error || '未知错误'}</td></tr>`;
+      return;
+    }
+
+    window._allArticles = data.articles || [];
+    document.getElementById('countTag').textContent = `共 ${window._allArticles.length} 条`;
+    renderTable(window._allArticles);
+  } catch (e) {
+    tb.innerHTML = `<tr><td colspan="6" class="empty">网络错误：${e.message}</td></tr>`;
+  }
+}
+
+function renderTable(articles) {
+  const tb = document.getElementById('tableBody');
+  if (!articles.length) {
+    tb.innerHTML = '<tr><td colspan="6" class="empty">暂无记录</td></tr>';
+    return;
+  }
+  tb.innerHTML = articles.map((a, i) => `
+    <tr>
+      <td style="color:#bbb;font-size:12px">${i + 1}</td>
+      <td class="title-cell">${escapeHtml(a.title || '')}</td>
+      <td class="topic-cell" title="${escapeHtml(a.topic || '')}">${escapeHtml(a.topic || '—')}</td>
+      <td class="date-cell">${a.published_at ? formatDate(a.published_at) : '—'}</td>
+      <td class="draft-cell" title="${escapeHtml(a.draft_id || '')}">${a.draft_id || '—'}</td>
+      <td>
+        <button class="btn btn-danger" style="padding:4px 10px;font-size:12px" onclick="deleteArticle(${a.id}, '${escapeHtml(a.title || '')}')">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function filterTable(keyword) {
+  keyword = keyword.trim().toLowerCase();
+  if (!keyword) {
+    renderTable(window._allArticles || []);
+    return;
+  }
+  const filtered = (window._allArticles || []).filter(a =>
+    (a.title || '').toLowerCase().includes(keyword) ||
+    (a.topic || '').toLowerCase().includes(keyword)
+  );
+  renderTable(filtered);
+}
+
+async function deleteArticle(id, title) {
+  if (!confirm(`确定删除「${title}」这条记录？\n删除后下次发布可能重复选到此主题。`)) return;
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/published/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': getToken() }
+    });
+    const data = await resp.json();
+    if (data.success) {
+      showToast('删除成功', 'success');
+      loadData();
+    } else {
+      showToast('删除失败：' + (data.error || ''), 'error');
+    }
+  } catch (e) {
+    showToast('网络错误：' + e.message, 'error');
+  }
+}
+
+async function migrateHistory() {
+  if (!confirm('这将把本地 articles 目录的所有历史文章批量录入数据库（跳过已有记录）。\n是否继续？')) return;
+
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '补录中…';
+
+  try {
+    // 通过服务端代理执行一次性脚本（避免跨域）
+    const resp = await fetch(`${API_BASE}/api/admin/run-script`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': getToken()
+      },
+      body: JSON.stringify({ script: 'migrate-published-articles' })
+    });
+    const data = await resp.json();
+
+    if (data.success || data.output) {
+      // 尝试解析输出行
+      const lines = (data.output || '').split('\n').filter(l => l.trim());
+      const summary = lines.find(l => l.includes('汇总')) || lines[lines.length - 1] || '';
+      showToast(summary || '补录完成', 'success');
+    } else {
+      showToast(data.error || '补录失败，服务端未返回结果', 'error');
+    }
+    loadData();
+  } catch (e) {
+    // 如果服务端没有 run-script，就直接刷新（本地脚本手动跑）
+    showToast('建议手动运行：node scripts/migrate-published-articles.js', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '补录历史文章';
+  }
+}
+
+function showToast(msg, type) {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function formatDate(d) {
+  const dt = new Date(d);
+  return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
+}
+
+function pad(n) { return n < 10 ? '0' + n : n; }
+
+function logout() {
+  localStorage.removeItem('admin_token');
+  location.href = 'index.html';
+}
+
+loadData();
+</script>
+</body>
+</html>
