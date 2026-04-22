@@ -680,6 +680,29 @@ router.post('/recipes/batch-delete', checkAuth, async (req, res) => {
   }
 });
 
+// POST /api/admin/recipes/clear-system
+// 清空所有 system 来源的菜谱（不影响用户菜谱）
+router.post('/recipes/clear-system', checkAuth, async (req, res) => {
+  try {
+    // 先统计
+    const count = await Recipe.count({ where: { authorOpenid: 'system' } });
+    // 删关联
+    const systemIds = (await Recipe.findAll({ where: { authorOpenid: 'system' }, attributes: ['id'] })).map(r => r.id);
+    if (systemIds.length > 0) {
+      await Collection.destroy({ where: { recipeId: systemIds } });
+      await RecipeLike.destroy({ where: { recipeId: systemIds } });
+      await RecipeComment.destroy({ where: { recipeId: systemIds } });
+      await BrowseHistory.destroy({ where: { recipeId: systemIds } });
+      await MealPlan.destroy({ where: { recipeId: systemIds } });
+      await Recipe.destroy({ where: { id: systemIds } });
+    }
+    res.json({ success: true, deleted: count, message: `成功清空 ${count} 条系统菜谱` });
+  } catch (err) {
+    console.error('[/api/admin/recipes/clear-system]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== 举报管理 ==========
 
 // GET /api/admin/reports/list

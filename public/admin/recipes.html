@@ -262,6 +262,7 @@
       </select>
       <input type="text" id="searchInput" class="search-box" placeholder="搜索菜谱标题..." onkeyup="if(event.key==='Enter'){currentPage=1;loadRecipes()}">
       <button class="btn btn-primary" onclick="currentPage=1;loadRecipes()">搜索</button>
+      <button class="btn btn-danger" onclick="clearSystemRecipes()">🗑️ 清空系统菜谱</button>
     </div>
     
     <div class="recipe-table">
@@ -269,6 +270,7 @@
         <table>
           <thead>
             <tr>
+              <th style="width:40px;"><input type="checkbox" id="checkAll" onchange="toggleCheckAll()"></th>
               <th>封面</th>
               <th>标题</th>
               <th>作者</th>
@@ -279,7 +281,7 @@
             </tr>
           </thead>
           <tbody id="recipeList">
-            <tr><td colspan="7" class="loading">加载中...</td></tr>
+            <tr><td colspan="8" class="loading">加载中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -358,6 +360,54 @@
     let currentPage = 1;
     let pageSize = 15;
     let totalCount = 0;
+    let checkedIds = new Set();
+
+    function toggleCheckAll() {
+      const el = document.getElementById('checkAll');
+      if (el.checked) {
+        checkedIds = new Set(allRecipes.map(r => r.id));
+      } else {
+        checkedIds = new Set();
+      }
+      document.querySelectorAll('.row-check').forEach(cb => cb.checked = el.checked);
+    }
+
+    function onCheckChange(id) {
+      if (checkedIds.has(id)) {
+        checkedIds.delete(id);
+      } else {
+        checkedIds.add(id);
+      }
+      const allChecked = allRecipes.length > 0 && checkedIds.size === allRecipes.length;
+      document.getElementById('checkAll').checked = allChecked;
+    }
+
+    async function clearSystemRecipes() {
+      if (!confirm('确定清空所有系统导入的菜谱？（用户菜谱不受影响）')) return;
+      const btn = document.querySelector('[onclick="clearSystemRecipes()"]');
+      btn.disabled = true;
+      btn.textContent = '清空中...';
+      try {
+        const res = await fetch(`${API_BASE}/admin/recipes/clear-system`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(`已清空 ${data.deleted} 条系统菜谱`);
+          currentPage = 1;
+          loadRecipes();
+        } else {
+          alert('清空失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('清空失败: ' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🗑️ 清空系统菜谱';
+      }
+    }
     
     if (!token) {
       location.href = 'index.html';
@@ -388,7 +438,7 @@
       const featured = document.getElementById('featuredFilter').value;
       const search = document.getElementById('searchInput').value.trim();
       const listEl = document.getElementById('recipeList');
-      listEl.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
+      listEl.innerHTML = '<tr><td colspan="8" class="loading">加载中...</td></tr>';
       
       try {
         let url = `${API_BASE}/admin/recipes/list?token=${token}&status=${status}&page=${currentPage}&pageSize=${pageSize}`;
@@ -414,13 +464,14 @@
         `;
         
         if (!allRecipes.length) {
-          listEl.innerHTML = '<tr><td colspan="7" class="empty">暂无菜谱</td></tr>';
+          listEl.innerHTML = '<tr><td colspan="8" class="empty">暂无菜谱</td></tr>';
           renderPagination();
           return;
         }
         
         listEl.innerHTML = allRecipes.map(r => `
           <tr>
+            <td><input type="checkbox" class="row-check" value="${r.id}" ${checkedIds.has(r.id) ? 'checked' : ''} onchange="onCheckChange(${r.id})"></td>
             <td><img class="recipe-cover" src="${getCoverUrl(r.cover)}" alt="" onerror="this.src='https://via.placeholder.com/60?text=No'"></td>
             <td class="recipe-title" title="${escapeHtml(r.title)}">${escapeHtml(r.title)}</td>
             <td>${r.authorOpenid === 'system' 
@@ -451,7 +502,7 @@
         renderPagination();
       } catch (e) {
         console.error(e);
-        listEl.innerHTML = '<tr><td colspan="7" class="empty">网络错误</td></tr>';
+        listEl.innerHTML = '<tr><td colspan="8" class="empty">网络错误</td></tr>';
       }
     }
     
