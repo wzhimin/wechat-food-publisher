@@ -861,4 +861,5 @@ router.post('/run-script', checkAuth, async (req, res) => {
   }
 });
 
+router.TOKENS = TOKENS;
 module.exports = router;
