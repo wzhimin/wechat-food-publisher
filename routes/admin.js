@@ -30,22 +30,38 @@ const ADMIN_ACCOUNTS = {
 };
 
 // Token 存储：数据库 admin_tokens 表，容器重启不丢
+// 表未创建前降级到内存 Map
+const TOKENS_MAP = new Map();
 
 // 生成 token（16 字节 hex = 32 字符）
 function generateToken() {
   return crypto.randomBytes(16).toString('hex');
 }
 
-// 验证 token（从数据库读取）
+// 验证 token（从数据库读取；表不存在时降级到内存 Map）
 async function verifyToken(token) {
   if (!token) return null;
-  const record = await AdminToken.findOne({ where: { token } });
-  if (!record) return null;
-  if (new Date(record.expires_at) < new Date()) {
-    await record.destroy();
+  try {
+    const record = await AdminToken.findOne({ where: { token } });
+    if (!record) return null;
+    if (new Date(record.expires_at) < new Date()) {
+      await record.destroy();
+      return null;
+    }
+    return { username: record.username, name: record.name };
+  } catch (e) {
+    // 表不存在时降级到内存 Map（首次部署时）
+    if (e.original && e.original.code === 'ER_NO_SUCH_TABLE') {
+      const info = TOKENS_MAP.get(token);
+      if (!info) return null;
+      if (Date.now() > info.expires) {
+        TOKENS_MAP.delete(token);
+        return null;
+      }
+      return info;
+    }
     return null;
   }
-  return { username: record.username, name: record.name };
 }
 
 // 中间件：检查 token（支持同步调用，验证失败返回 401）
@@ -75,14 +91,27 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: '账号或密码错误' });
     }
     
-    // 生成 token，有效期 7 天，写入数据库
+    // 生成 token，有效期 7 天，写入数据库（表不存在时降级到内存）
     const token = generateToken();
-    await AdminToken.create({
-      token,
-      username,
-      name: account.name,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-    });
+    try {
+      await AdminToken.create({
+        token,
+        username,
+        name: account.name,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      });
+    } catch (e) {
+      if (e.original && e.original.code === 'ER_NO_SUCH_TABLE') {
+        // 表还没创建，降级到内存 Map
+        TOKENS_MAP.set(token, {
+          username,
+          name: account.name,
+          expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        });
+      } else {
+        throw e;
+      }
+    }
     
     res.json({
       success: true,
