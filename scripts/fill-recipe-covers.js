@@ -188,6 +188,7 @@ async function generateWithWanxiang(title) {
 async function pollWanxiangTask(taskId, maxRetries = 30) {
   for (let i = 0; i < maxRetries; i++) {
     await sleep(3000);
+    console.log(`[轮询] 第 ${i + 1} 次查询任务状态...`);
     
     const result = await new Promise((resolve) => {
       const opts = {
@@ -206,7 +207,10 @@ async function pollWanxiangTask(taskId, maxRetries = 30) {
           try { resolve(JSON.parse(data)); } catch { resolve(null); }
         });
       });
-      req.on('error', () => resolve(null));
+      req.on('error', (e) => {
+        console.log(`[轮询] 请求失败: ${e.message}`);
+        resolve(null);
+      });
       req.end();
     });
     
@@ -433,25 +437,40 @@ async function findCoverImage(title, recipeId, useAI = true) {
  * @returns {Object} { success: number, failed: number, failedTitles: string[] }
  */
 async function fillCoversForRecipes(recipes, options = {}) {
-  const { dryRun = false, delayMs = 1200, useAI = true } = options;
+  const { dryRun = false, delayMs = 1200, useAI = true, replaceNonCOS = false } = options;
   
   if (!recipes || recipes.length === 0) {
     return { success: 0, failed: 0, failedTitles: [] };
   }
 
-  // 只处理无封面的
-  const noCover = recipes.filter(r => !r.cover || r.cover === '');
-  if (noCover.length === 0) {
-    console.log('[补封面] 所有菜谱已有封面');
-    return { success: 0, failed: 0, failedTitles: [] };
+  // 筛选目标菜谱
+  let targetRecipes;
+  if (replaceNonCOS) {
+    // 替换非 COS 封面（微信素材库、Pixabay 代理、容器临时路径等）
+    targetRecipes = recipes.filter(r => {
+      if (!r.cover || r.cover === '') return true; // 无封面
+      return !r.cover.includes('cpdq-1257837176.cos'); // 非 COS
+    });
+    if (targetRecipes.length === 0) {
+      console.log('[补封面] 所有菜谱封面均为 COS 链接');
+      return { success: 0, failed: 0, failedTitles: [] };
+    }
+    console.log(`[补封面] 开始处理 ${targetRecipes.length} 道非 COS 封面菜谱`);
+  } else {
+    // 只处理无封面的
+    targetRecipes = recipes.filter(r => !r.cover || r.cover === '');
+    if (targetRecipes.length === 0) {
+      console.log('[补封面] 所有菜谱已有封面');
+      return { success: 0, failed: 0, failedTitles: [] };
+    }
+    console.log(`[补封面] 开始处理 ${targetRecipes.length} 道无封面菜谱`);
   }
-
-  console.log(`[补封面] 开始处理 ${noCover.length} 道无封面菜谱`);
   console.log(`[补封面] 图片来源: 通义万相 AI（唯一来源，失败则留空）`);
   
   let success = 0, failed = 0;
   const failedTitles = [];
 
+  const noCover = targetRecipes; // 兼容后续变量名
   for (let i = 0; i < noCover.length; i++) {
     const recipe = noCover[i];
     console.log(`[补封面] [${i + 1}/${noCover.length}] ${recipe.title}`);
@@ -506,11 +525,12 @@ async function main() {
   // 解析命令行参数
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
+  const replaceNonCOS = args.includes('--replace-non-cos');
   const limit = parseInt(args.find(a => a.startsWith('--limit='))?.split('=')[1]) || 50;
 
   console.log(`✅ 通义万相 API Key: ${DASHSCOPE_API_KEY.slice(0, 10)}...`);
   console.log(`📡 后端地址: ${API_BASE}`);
-  console.log(`🔧 模式: ${dryRun ? '试运行' : '正式模式'}`);
+  console.log(`🔧 模式: ${dryRun ? '试运行' : '正式模式'}${replaceNonCOS ? ' (替换非COS)' : ''}`);
   console.log(`📊 批次大小: ${limit}\n`);
 
   // 拉取菜谱列表
@@ -524,7 +544,12 @@ async function main() {
   const allRecipes = res.data;
   console.log(`📊 总共 ${res.total} 道菜谱\n`);
 
-  const batch = allRecipes.filter(r => !r.cover || r.cover === '').slice(0, limit);
+  let batch;
+  if (replaceNonCOS) {
+    batch = allRecipes.filter(r => !r.cover || r.cover === '' || !r.cover.includes('cpdq-1257837176.cos')).slice(0, limit);
+  } else {
+    batch = allRecipes.filter(r => !r.cover || r.cover === '').slice(0, limit);
+  }
   console.log(`📭 无封面: ${batch.length} 道（本次处理）\n`);
 
   if (batch.length === 0) {
@@ -532,7 +557,7 @@ async function main() {
     process.exit(0);
   }
 
-  const result = await fillCoversForRecipes(batch, { dryRun, delayMs: 1500, useAI: true });
+  const result = await fillCoversForRecipes(batch, { dryRun, delayMs: 1500, useAI: true, replaceNonCOS });
 
   console.log('\n═══════════════════════════════════════');
   console.log('📋 结果汇总');

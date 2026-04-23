@@ -299,6 +299,43 @@ router.post('/recognize', async (req, res) => {
   }
 });
 
+// POST /api/meal/records — 手动创建饮食记录（无需拍照）
+// Body: { openid, type, foodName, calories, protein?, carbs?, fat?, fiber?, sodium?, date? }
+router.post('/records', async (req, res) => {
+  try {
+    const { openid, type, foodName, calories, protein, carbs, fat, fiber, sodium, date } = req.body;
+    if (!openid) return res.status(400).json({ error: '缺少 openid' });
+    if (!foodName) return res.status(400).json({ error: '缺少 foodName' });
+    if (calories === undefined || calories === null) return res.status(400).json({ error: '缺少 calories' });
+
+    const mealType = type || 'lunch';
+    if (!['breakfast', 'lunch', 'dinner', 'snack'].includes(mealType)) {
+      return res.status(400).json({ error: 'type 只能是 breakfast/lunch/dinner/snack' });
+    }
+
+    const record = await MealRecord.create({
+      openid,
+      type: mealType,
+      photo_url: null,
+      food_name: foodName,
+      calories: Number(calories) || 0,
+      protein: Number(protein) || 0,
+      carbs: Number(carbs) || 0,
+      fat: Number(fat) || 0,
+      fiber: Number(fiber) || 0,
+      sodium: Number(sodium) || 0,
+      food_details: [],
+      estimate_method: 'manual',
+      record_date: date || new Date().toISOString().slice(0, 10),
+    });
+
+    res.json({ success: true, data: { record } });
+  } catch (err) {
+    console.error('[/api/meal/records POST]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/meal/records?openid=xxx&date=2026-04-23&type=lunch
 router.get('/records', async (req, res) => {
   try {

@@ -144,7 +144,7 @@ async function main() {
   console.log();
 
   // 调 fillCoversForRecipes 补封面
-  const result = await fillCoversForRecipes(needFill, { dryRun, delayMs: 1500, useAI: !noAI });
+  const result = await fillCoversForRecipes(needFill, { dryRun, delayMs: 1500 });
 
   console.log('\n═══════════════════════════════════════');
   console.log('📋 结果汇总');
