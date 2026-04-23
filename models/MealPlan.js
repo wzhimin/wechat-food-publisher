@@ -8,9 +8,9 @@ const MealPlan = sequelize.define('MealPlan', {
     comment: '用户openid',
   },
   type: {
-    type: DataTypes.ENUM('lunch', 'dinner'),
+    type: DataTypes.ENUM('breakfast', 'lunch', 'dinner', 'snack'),
     allowNull: false,
-    comment: '午餐/晚餐',
+    comment: '餐次类型：早餐/午餐/晚餐/加餐',
   },
   title: {
     type: DataTypes.STRING(128),

@@ -162,6 +162,27 @@ async function init() {
     );
     console.log('[修复] published_articles 字符集 → utf8mb4');
   } catch (e) { console.warn('[修复] published_articles 字符集出错:', e.message); }
+
+  // 第十步：同步 meal_records 表（拍照识别食物热量功能）
+  const MealRecord = require('./models/MealRecord');
+  const [mealRecordTable] = await sequelize.query(`SHOW TABLES LIKE 'meal_records'`);
+  if (mealRecordTable.length === 0) {
+    await MealRecord.sync();
+    console.log('[sync] MealRecord 创建完成');
+  }
+
+  // 第十一步：扩展 meal_plans 的 type 字段（lunch/dinner → breakfast/lunch/dinner/snack）
+  try {
+    const [typeRows] = await sequelize.query(
+      `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='nodejs_demo' AND TABLE_NAME='meal_plans' AND COLUMN_NAME='type'`
+    );
+    if (typeRows.length > 0 && !typeRows[0].COLUMN_TYPE.includes('breakfast')) {
+      await sequelize.query(
+        `ALTER TABLE meal_plans MODIFY COLUMN type ENUM('breakfast','lunch','dinner','snack') NOT NULL COMMENT '餐次类型：早餐/午餐/晚餐/加餐'`
+      );
+      console.log('[迁移] meal_plans.type 扩展 → breakfast/lunch/dinner/snack');
+    }
+  } catch (e) { console.warn('[迁移] meal_plans type 扩展出错:', e.message); }
 }
 
 // 导出初始化方法和模型
