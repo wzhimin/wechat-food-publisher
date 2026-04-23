@@ -241,7 +241,7 @@
                 <img src="${f.avatarUrl || 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'}" alt="">
                 <div>
                   <div class="name">${f.nickName || '用户'}</div>
-                  <div class="time">${formatDate(f.created_at)}</div>
+                  <div class="time">${formatDate(f.created_at)} / 更新 ${formatDate(f.updated_at)}</div>
                 </div>
               </div>
               <span class="status-badge status-${f.status}">${f.status === 'pending' ? '待处理' : '已处理'}</span>

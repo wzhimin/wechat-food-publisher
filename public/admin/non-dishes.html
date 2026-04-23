@@ -240,10 +240,11 @@
             <th>问题</th>
             <th>食材/步骤</th>
             <th>创建时间</th>
+            <th>更新时间</th>
           </tr>
         </thead>
         <tbody id="recipeList">
-          <tr><td colspan="6" class="loading">加载中...</td></tr>
+          <tr><td colspan="7" class="loading">加载中...</td></tr>
         </tbody>
       </table>
       <div class="pagination" id="pagination"></div>
@@ -296,7 +297,7 @@
         `;
         
         if (!allRecipes.length) {
-          listEl.innerHTML = '<tr><td colspan="6" class="empty">🎉 未发现疑似非菜谱内容</td></tr>';
+          listEl.innerHTML = '<tr><td colspan="7" class="empty">🎉 未发现疑似非菜谱内容</td></tr>';
           document.getElementById('pagination').innerHTML = '';
           return;
         }
@@ -318,6 +319,7 @@
               <span class="status-tag ${r.hasSteps ? 'status-ok' : 'status-error'}">${r.stepsCount} 步骤</span>
             </td>
             <td>${formatDate(r.created_at)}</td>
+            <td>${formatDate(r.updated_at)}</td>
           </tr>
         `).join('');
         
@@ -325,7 +327,7 @@
         renderPagination(totalPages);
       } catch (e) {
         console.error(e);
-        listEl.innerHTML = '<tr><td colspan="6" class="empty">网络错误: ' + e.message + '</td></tr>';
+        listEl.innerHTML = '<tr><td colspan="7" class="empty">网络错误: ' + e.message + '</td></tr>';
       }
     }
     

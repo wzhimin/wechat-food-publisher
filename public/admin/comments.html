@@ -226,7 +226,7 @@
                 <img src="${c.avatarUrl || 'https://mmbiz.qpic.cn/mmbiz/icTdbqWNOwNRna42FI242Lcia07jQodd2FJGIYQfG0LAJGFxM4FbnQP6yfMxBgJ0F3YRqJCJ1aPAK2dQagdusBZg/0'}" alt="">
                 <div>
                   <div class="name">${escapeHtml(c.nickName || '用户')}</div>
-                  <div class="time">${formatDate(c.created_at)}</div>
+                  <div class="time">${formatDate(c.created_at)} / 更新 ${formatDate(c.updated_at)}</div>
                 </div>
               </div>
               <span class="comment-status status-${c.status}">${getStatusText(c.status)}</span>

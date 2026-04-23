@@ -258,6 +258,7 @@
               <th>状态</th>
               <th>收藏/点赞</th>
               <th>发布时间</th>
+              <th>更新时间</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -408,6 +409,7 @@
             </td>
             <td>${r.collectCount || 0} / ${r.likeCount || 0}</td>
             <td>${formatDate(r.created_at)}</td>
+            <td>${formatDate(r.updated_at)}</td>
             <td class="actions">
               <button class="btn btn-sm btn-info" onclick="showDetail(${r.id})">详情</button>
               <button class="btn btn-sm btn-warning" onclick="editRecipe(${r.id})">编辑</button>

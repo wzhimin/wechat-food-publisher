@@ -380,6 +380,7 @@
                 <div class="report-meta">
                   <span class="type-tag">${typeLabel}</span>
                   <span class="time">${formatDateTime(r.created_at)}</span>
+                  <span class="time" style="margin-left:8px">更新 ${formatDateTime(r.updated_at)}</span>
                 </div>
                 <span class="report-status status-${r.status}">${getStatusText(r.status)}</span>
               </div>
