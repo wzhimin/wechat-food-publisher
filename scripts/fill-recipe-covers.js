@@ -8,7 +8,7 @@
  * 用法:
  *   node scripts/fill-recipe-covers.js
  *   node scripts/fill-recipe-covers.js --dry-run    # 只搜索不更新
- *   node scripts/fill-recipe-covers.js --limit=20   # 只处理前20条
+ *   node scripts/fill-recipe-covers.js --limit=20   # 限制本次处理数量（默认50，上限50）
  *   node scripts/fill-recipe-covers.js --dry-run    # 只搜索不更新
  * 
  * 也可作为模块导入：
@@ -535,7 +535,7 @@ async function main() {
 
   // 拉取菜谱列表
   console.log('📦 拉取菜谱数据...');
-  const res = await httpGet('/api/recipe/list?page=1&pageSize=200');
+  const res = await httpGet('/api/recipe/list?page=1&pageSize=500');
   if (!res.success) {
     console.error('❌ 拉取失败:', res);
     process.exit(1);

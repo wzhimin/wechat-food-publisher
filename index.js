@@ -228,10 +228,26 @@ app.post('/api/recipe/sync', async (req, res) => {
       return res.json({ success: true, count: 0, message: '未解析到菜谱，可能不是菜谱类文章' });
     }
 
-    const created = await Recipe.bulkCreate(recipes, {
+    // 过滤：已有标题的菜完全跳过，什么都不改
+    const existingTitles = (await Recipe.findAll({
+      attributes: ['title'],
+      where: { title: recipes.map(r => r.title) },
+      raw: true,
+    })).map(r => r.title);
+    const newRecipes = recipes.filter(r => !existingTitles.includes(r.title));
+    const skippedCount = recipes.length - newRecipes.length;
+    if (skippedCount > 0) {
+      console.log(`[菜谱同步] 跳过 ${skippedCount} 道已存在菜谱：` + recipes.filter(r => existingTitles.includes(r.title)).map(r => r.title).join(', '));
+    }
+
+    if (newRecipes.length === 0) {
+      return res.json({ success: true, count: 0, skipped: skippedCount, message: '全部菜谱已存在，跳过' });
+    }
+
+    const created = await Recipe.bulkCreate(newRecipes, {
       updateOnDuplicate: [
         'ingredients', 'steps', 'tips', 'tags', 'season',
-        'difficulty', 'duration', 'cover', 'updatedAt',
+        'difficulty', 'duration', 'updatedAt',
         'articleMd5', 'publishedArticleId',
       ],
     });
@@ -243,7 +259,7 @@ app.post('/api/recipe/sync', async (req, res) => {
         { articleMd5, publishedArticleId: resolvedPublishedArticleId },
         {
           where: {
-            title: recipes.map(r => r.title),
+            title: newRecipes.map(r => r.title),
             [require('sequelize').Op.or]: [
               { articleMd5: null },
               { publishedArticleId: null },
@@ -253,8 +269,8 @@ app.post('/api/recipe/sync', async (req, res) => {
       );
     }
 
-    console.log(`[菜谱同步] 处理 ${recipes.length} 道菜，articleMd5=${articleMd5 || '无'}，publishedArticleId=${resolvedPublishedArticleId || '无'}：${recipes.map(r => r.title).join(', ')}`);
-    res.json({ success: true, count: recipes.length, data: created });
+    console.log(`[菜谱同步] 插入 ${created.length} 道新菜谱（跳过 ${skippedCount} 道已存在），articleMd5=${articleMd5 || '无'}：${created.map(r => r.title).join(', ')}`);
+    res.json({ success: true, count: created.length, skipped: skippedCount, data: created });
 
     // 异步补全封面
     setImmediate(async () => {
@@ -340,10 +356,19 @@ app.post('/api/publish', async (req, res) => {
           publishedAt: new Date(),
         });
         if (recipes.length > 0) {
-          await Recipe.bulkCreate(recipes, { updateOnDuplicate: ["ingredients", "steps", "tips", "tags", "season", "difficulty", "duration", "cover", "updatedAt"] });
-          console.log(`[菜谱入库] 成功入库 ${recipes.length} 道菜：${recipes.map(r => r.title).join(', ')}`);
-        } else {
-          console.log('[菜谱入库] 未解析到菜谱，可能不是菜谱类文章');
+          // 过滤：已有标题的菜完全跳过
+          const existingTitles = (await Recipe.findAll({
+            attributes: ['title'],
+            where: { title: recipes.map(r => r.title) },
+            raw: true,
+          })).map(r => r.title);
+          const newRecipes = recipes.filter(r => !existingTitles.includes(r.title));
+          if (newRecipes.length > 0) {
+            await Recipe.bulkCreate(newRecipes, { updateOnDuplicate: ["ingredients", "steps", "tips", "tags", "season", "difficulty", "duration", "updatedAt"] });
+            console.log(`[菜谱入库] 插入 ${newRecipes.length} 道新菜（跳过 ${recipes.length - newRecipes.length} 道已存在）：${newRecipes.map(r => r.title).join(', ')}`);
+          } else {
+            console.log(`[菜谱入库] 全部 ${recipes.length} 道菜已存在，跳过`);
+          }
         }
       } catch (err) {
         console.error('[菜谱入库] 失败:', err.message);
@@ -386,10 +411,19 @@ app.post('/api/draft', async (req, res) => {
           publishedAt: new Date(),
         });
         if (recipes.length > 0) {
-          await Recipe.bulkCreate(recipes, { updateOnDuplicate: ["ingredients", "steps", "tips", "tags", "season", "difficulty", "duration", "cover", "updatedAt"] });
-          console.log(`[菜谱入库] 成功入库 ${recipes.length} 道菜：${recipes.map(r => r.title).join(', ')}`);
-        } else {
-          console.log('[菜谱入库] 未解析到菜谱，可能不是菜谱类文章');
+          // 过滤：已有标题的菜完全跳过
+          const existingTitles = (await Recipe.findAll({
+            attributes: ['title'],
+            where: { title: recipes.map(r => r.title) },
+            raw: true,
+          })).map(r => r.title);
+          const newRecipes = recipes.filter(r => !existingTitles.includes(r.title));
+          if (newRecipes.length > 0) {
+            await Recipe.bulkCreate(newRecipes, { updateOnDuplicate: ["ingredients", "steps", "tips", "tags", "season", "difficulty", "duration", "updatedAt"] });
+            console.log(`[菜谱入库] 插入 ${newRecipes.length} 道新菜（跳过 ${recipes.length - newRecipes.length} 道已存在）：${newRecipes.map(r => r.title).join(', ')}`);
+          } else {
+            console.log(`[菜谱入库] 全部 ${recipes.length} 道菜已存在，跳过`);
+          }
         }
       } catch (err) {
         console.error('[菜谱入库] 失败:', err.message);
@@ -765,6 +799,11 @@ app.use('/api/user', userRouter);
 app.use('/api/todo', todoRouter);
 app.use('/api/recipe', recipeRouter);
 app.use('/api/collect', collectionRouter);
+// meal 路由前加日志，排查 400 问题
+app.use('/api/meal', (req, res, next) => {
+  console.log('[/api/meal] 请求到达:', req.method, req.path, 'body keys:', Object.keys(req.body || {}));
+  next();
+});
 app.use('/api/meal', mealRouter);
 app.use('/api/history', historyRouter);
 app.use('/api/feedback', feedbackRouter);
