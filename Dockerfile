@@ -1,16 +1,12 @@
 # 二开推荐阅读[如何提高项目构建效率](https://developers.weixin.qq.com/miniprogram/dev/wxcloudrun/src/scene/build/speed.html)
-FROM alpine:3.13
+# 基于 node:18-alpine，内置 musl 兼容的 Node.js 18
+FROM node:18-alpine
 
 # 容器默认时区为UTC，如需使用上海时间请启用以下时区设置命令
 # RUN apk add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo Asia/Shanghai > /etc/timezone
 
 # 使用 HTTPS 协议访问容器云调用证书安装
-RUN apk add ca-certificates
-
-# 安装 Node.js 18 LTS（sharp 要求 >=18.17.0）
-RUN apk add --update --no-cache curl && \
-    curl -fsSL https://unofficial-builds.nodejs.org/download/release/v18.20.4/node-v18.20.4-linux-x64-musl.tar.gz | tar -xz -C /usr/local --strip-components=1 && \
-    npm install -g npm
+RUN apk add --update --no-cache ca-certificates
 
 # # 指定工作目录
 WORKDIR /app
