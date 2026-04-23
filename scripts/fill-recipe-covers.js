@@ -383,15 +383,22 @@ async function searchPixabay(query) {
   });
 }
 
-// 下载图片并上传到 COS
+// 下载图片并上传到云端 COS（通过 /api/upload-cover 接口）
 async function downloadAndUpload(imageUrl, recipeId) {
   try {
     const buffer = await downloadImage(imageUrl);
-    const coverUrl = await uploadCoverToCOS(buffer, recipeId);
-    console.log(`    ☁️ 已上传到 COS: ${coverUrl}`);
-    return coverUrl;
+    const imageBase64 = buffer.toString('base64');
+    
+    // 调用云端接口上传，云端用容器内的 COS 凭据直传
+    const res = await httpPost('/api/upload-cover', { imageBase64 });
+    if (res.success && res.url) {
+      console.log(`    ☁️ 已上传到 COS: ${res.url}`);
+      return res.url;
+    }
+    console.log(`    ⚠️ 云端上传失败（${res.error || '未知错误'}），保留原链接`);
+    return imageUrl;
   } catch (e) {
-    console.log(`    ⚠️ COS 上传失败（${e.message}），保留原链接`);
+    console.log(`    ⚠️ 云端上传失败（${e.message}），保留原链接`);
     return imageUrl;
   }
 }
