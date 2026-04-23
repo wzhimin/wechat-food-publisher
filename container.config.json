@@ -1,8 +1,4 @@
 {
-  	// 本配置文件仅配合模板部署使用，为模板部署的服务生成「服务设置」的初始值。
-	// 模板部署结束后，后续服务发布与本配置文件完全无关，修改「服务设置」请到控制台操作。
-	// 复制模板代码自行开发请忽略本配置文件。
-  
   "containerPort": 80,
   "dockerfilePath": "Dockerfile",
   "buildDir": "",
@@ -13,19 +9,22 @@
   "policyType": "cpu",
   "policyThreshold": 80,
   "policyDetails": [
-	{
-		"PolicyType": "cpu",
-		"PolicyThreshold": 80
-	},
-	{
-		"PolicyType": "mem",
-		"PolicyThreshold": 80
-	}
+    {
+      "PolicyType": "cpu",
+      "PolicyThreshold": 80
+    },
+    {
+      "PolicyType": "mem",
+      "PolicyThreshold": 80
+    }
   ],
   "envParams": {
     "WECHAT_APP_ID": "wx85ae98c22a4d22e1",
     "WECHAT_APP_SECRET": "在这里填入你的AppSecret",
-    "WECHAT_TOKEN": "wechat_token_2024"
+    "WECHAT_TOKEN": "wechat_token_2024",
+    "COS_SECRET_ID": "在这里填入你的SecretId",
+    "COS_SECRET_KEY": "在这里填入你的SecretKey",
+    "COS_CDN_DOMAIN": ""
   },
   "customLogs": "stdout",
   "initialDelaySeconds": 2,
@@ -33,5 +32,7 @@
   "executeSQLs": [
     "CREATE DATABASE IF NOT EXISTS nodejs_demo;",
     "USE nodejs_demo;"
-  ]
+  ],
+  "COSBucket": "cpdq-1257837176",
+  "COSRegion": "ap-guangzhou"
 }

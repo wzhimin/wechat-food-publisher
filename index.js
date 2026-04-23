@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const FormData = require('form-data');
 const fs = require('fs');
 const path = require('path');
+const COS = require('cos-nodejs-sdk-v5');
 
 // ========== 数据库初始化 ==========
 const { init, sequelize } = require('./db');
@@ -399,10 +400,10 @@ app.post('/api/draft', async (req, res) => {
   }
 });
 
-// 保存封面图到服务器本地（不上传微信素材，仅供小程序展示）
+// 保存封面图到腾讯云 COS（持久化，容器重建不丢失）
 // POST /api/upload-cover
 // Body: { imageBase64 }
-// 返回: { success: true, url: 'https://xxx.sh.run.tcloudbase.com/covers/xxx.jpg' }
+// 返回: { success: true, url: 'https://cpdq-1257837176.cos.ap-guangzhou.myqcloud.com/covers/xxx.jpg' }
 app.post('/api/upload-cover', async (req, res) => {
   try {
     const { imageBase64 } = req.body;
@@ -422,32 +423,39 @@ app.post('/api/upload-cover', async (req, res) => {
       });
     }
 
-    // 创建目录
-    const coverDir = path.join(__dirname, 'public', 'covers');
-    if (!fs.existsSync(coverDir)) {
-      fs.mkdirSync(coverDir, { recursive: true });
+    // 生成唯一文件名
+    const filename = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+    const key = `covers/${filename}`;
+
+    // 从环境变量读取 COS 凭证
+    const secretId = process.env.COS_SECRET_ID;
+    const secretKey = process.env.COS_SECRET_KEY;
+    const cdnDomain = process.env.COS_CDN_DOMAIN; // 可选，未配置则用 COS 默认地址
+
+    if (!secretId || !secretKey) {
+      console.error('[COS] 缺少 COS_SECRET_ID 或 COS_SECRET_KEY 环境变量');
+      return res.status(500).json({ error: '服务器 COS 配置缺失' });
     }
 
-    const filename = `cover_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
-    const filepath = path.join(coverDir, filename);
-    fs.writeFileSync(filepath, imageBuffer);
-
-    // 返回完整 URL（小程序需要完整路径才能加载）
-    const host = req.get('host');
-    const protocol = req.protocol;
-    const imageUrl = host ? `${protocol}://${host}/covers/${filename}` : `/covers/${filename}`;
-
-    res.json({
-      success: true,
-      url: imageUrl,
-      message: '封面保存成功'
+    // 上传到 COS
+    const cos = new COS({ SecretId: secretId, SecretKey: secretKey });
+    await cos.putObject({
+      Bucket: 'cpdq-1257837176',
+      Region: 'ap-guangzhou',
+      Key: key,
+      Body: imageBuffer,
+      ContentType: 'image/jpeg',
     });
+
+    // 返回访问地址（优先 CDN 域名，否则用 COS 默认地址）
+    const imageUrl = cdnDomain
+      ? `https://${cdnDomain}/${key}`
+      : `https://cpdq-1257837176.cos.ap-guangzhou.myqcloud.com/${key}`;
+
+    res.json({ success: true, url: imageUrl, message: '封面上传成功' });
   } catch (err) {
-    console.error('封面保存失败:', err.message);
-    res.status(500).json({
-      error: '封面保存失败',
-      detail: err.message,
-    });
+    console.error('封面上传失败:', err.message);
+    res.status(500).json({ error: '封面上传失败', detail: err.message });
   }
 });
 

@@ -18,6 +18,7 @@
 
 const https = require('https');
 const http = require('http');
+const COS = require('cos-nodejs-sdk-v5');
 
 // ========== 配置 ==========
 const PIXABAY_API_KEY = '55448016-5bb57529981c9058bfeb1153c';
@@ -88,33 +89,41 @@ function downloadImage(url) {
   });
 }
 
-// ========== 上传封面图到服务器本地（不上传微信素材） ==========
-async function uploadCoverToServer(buffer) {
-  const b64 = buffer.toString('base64');
-  const data = JSON.stringify({ imageBase64: b64 });
-  const url = new URL('/api/upload-cover', API_BASE);
-  return new Promise((resolve, reject) => {
-    const opts = {
-      hostname: url.hostname,
-      path: url.pathname,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
-    };
-    const req = https.request(opts, res => {
-      let body = '';
-      res.on('data', c => body += c);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(body);
-          if (json.success && json.url) resolve(json.url);
-          else reject(new Error(json.error || '上传失败'));
-        } catch (e) { reject(new Error(body)); }
-      });
-    });
-    req.on('error', reject);
-    req.write(data);
-    req.end();
+// 上传封面图到腾讯云 COS（持久化，容器重建不丢失）
+async function uploadCoverToCOS(buffer, recipeId) {
+  const ext = detectImageExt(buffer) || 'jpg';
+  const filename = `cover_${recipeId}_${Date.now()}.${ext}`;
+  const key = `covers/${filename}`;
+
+  const secretId = process.env.COS_SECRET_ID;
+  const secretKey = process.env.COS_SECRET_KEY;
+  const cdnDomain = process.env.COS_CDN_DOMAIN;
+
+  if (!secretId || !secretKey) {
+    throw new Error('缺少 COS_SECRET_ID 或 COS_SECRET_KEY 环境变量');
+  }
+
+  const cos = new COS({ SecretId: secretId, SecretKey: secretKey });
+  await cos.putObject({
+    Bucket: 'cpdq-1257837176',
+    Region: 'ap-guangzhou',
+    Key: key,
+    Body: buffer,
+    ContentType: `image/${ext}`,
   });
+
+  return cdnDomain
+    ? `https://${cdnDomain}/${key}`
+    : `https://cpdq-1257837176.cos.ap-guangzhou.myqcloud.com/${key}`;
+}
+
+// 从 buffer 头部检测图片扩展名
+function detectImageExt(buffer) {
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8) return 'jpg';
+  if (buffer[0] === 0x89 && buffer[1] === 0x50) return 'png';
+  if (buffer[0] === 0x47 && buffer[1] === 0x49) return 'gif';
+  if (buffer[0] === 0x52 && buffer[1] === 0x49) return 'webp';
+  return null;
 }
 
 // ========== 通义万相 AI 图片生成 ==========
@@ -374,31 +383,27 @@ async function searchPixabay(query) {
   });
 }
 
-// 智能搜索：AI生成 → Pixabay逐级降级
-// 通用的"下载→上传服务器本地"步骤，AI/Pixabay 共用
-async function downloadAndUpload(imageUrl) {
+// 下载图片并上传到 COS
+async function downloadAndUpload(imageUrl, recipeId) {
   try {
     const buffer = await downloadImage(imageUrl);
-    const coverUrl = await uploadCoverToServer(buffer);
-    console.log(`    ☁️ 已保存到服务器: ${coverUrl}`);
+    const coverUrl = await uploadCoverToCOS(buffer, recipeId);
+    console.log(`    ☁️ 已上传到 COS: ${coverUrl}`);
     return coverUrl;
   } catch (e) {
-    // 上传失败，保留原链接（降级兜底）
-    console.log(`    ⚠️ 上传服务器失败（${e.message}），保留原链接`);
+    console.log(`    ⚠️ COS 上传失败（${e.message}），保留原链接`);
     return imageUrl;
   }
 }
 
-async function findCoverImage(title, useAI = true) {
-  // 只用通义万相 AI 生成图片
-  // AI 失败则留空，不降级 Pixabay（Pixabay 图片与菜谱匹配度低）
+async function findCoverImage(title, recipeId, useAI = true) {
   if (useAI) {
     console.log(`    🤖 尝试 AI 生成...`);
     const aiResult = await generateWithWanxiang(title);
     if (aiResult) {
-      console.log(`    ✅ AI 生成成功，下载并保存到服务器...`);
-      const finalUrl = await downloadAndUpload(aiResult.url);
-      return { url: finalUrl, source: '通义万相→本地', photographer: 'AI生成' };
+      console.log(`    ✅ AI 生成成功，上传到 COS...`);
+      const finalUrl = await downloadAndUpload(aiResult.url, recipeId);
+      return { url: finalUrl, source: '通义万相→COS', photographer: 'AI生成' };
     }
     console.log(`    ⚠️  AI 生成失败，无封面图`);
   }
@@ -436,7 +441,7 @@ async function fillCoversForRecipes(recipes, options = {}) {
     const recipe = noCover[i];
     console.log(`[补封面] [${i + 1}/${noCover.length}] ${recipe.title}`);
 
-    const result = await findCoverImage(recipe.title, useAI);
+    const result = await findCoverImage(recipe.title, recipe.id, useAI);
 
     if (result) {
       console.log(`[补封面]     ✅ ${result.source}: ${result.url.slice(0, 50)}...`);
