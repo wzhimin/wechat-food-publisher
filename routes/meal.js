@@ -350,4 +350,62 @@ router.delete('/records/:id', async (req, res) => {
   }
 });
 
+// GET /api/meal/records/summary?openid=xxx&days=7
+// 返回最近 N 天的每日热量汇总 + 营养素均值，用于趋势图
+router.get('/records/summary', async (req, res) => {
+  try {
+    const openid = req.query.openid || '';
+    const days = Math.min(parseInt(req.query.days) || 7, 30);
+    if (!openid) return res.status(400).json({ error: '缺少 openid' });
+
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    const sinceStr = since.toISOString().slice(0, 10);
+
+    const records = await MealRecord.findAll({
+      where: { openid, record_date: { [require('sequelize').Op.gte]: sinceStr } },
+      order: [['record_date', 'ASC']],
+    });
+
+    // 按日期汇总
+    const dailyMap = {};
+    records.forEach(r => {
+      const d = r.record_date;
+      if (!dailyMap[d]) dailyMap[d] = { date: d, calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, count: 0 };
+      dailyMap[d].calories += r.calories || 0;
+      dailyMap[d].protein += r.protein || 0;
+      dailyMap[d].carbs += r.carbs || 0;
+      dailyMap[d].fat += r.fat || 0;
+      dailyMap[d].fiber += r.fiber || 0;
+      dailyMap[d].count++;
+    });
+
+    // 填充缺失日期（没有记录的天补0）
+    const daily = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const ds = d.toISOString().slice(0, 10);
+      daily.push(dailyMap[ds] || { date: ds, calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, count: 0 });
+    }
+
+    // 总体均值
+    const daysWithData = daily.filter(d => d.count > 0);
+    const avg = daysWithData.length ? {
+      calories: Math.round(daysWithData.reduce((s, d) => s + d.calories, 0) / daysWithData.length),
+      protein: Math.round(daysWithData.reduce((s, d) => s + d.protein, 0) / daysWithData.length * 10) / 10,
+      carbs: Math.round(daysWithData.reduce((s, d) => s + d.carbs, 0) / daysWithData.length * 10) / 10,
+      fat: Math.round(daysWithData.reduce((s, d) => s + d.fat, 0) / daysWithData.length * 10) / 10,
+    } : { calories: 0, protein: 0, carbs: 0, fat: 0 };
+
+    // 今日汇总
+    const today = daily.find(d => d.date === new Date().toISOString().slice(0, 10)) || { calories: 0, protein: 0, carbs: 0, fat: 0, count: 0 };
+
+    res.json({ success: true, data: { daily, avg, today, daysWithData: daysWithData.length, totalDays: days } });
+  } catch (err) {
+    console.error('[/api/meal/records/summary]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
