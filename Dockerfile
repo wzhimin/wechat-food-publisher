@@ -1,14 +1,19 @@
-# 二开推荐阅读[如何提高项目构建效率](https://developers.weixin.qq.com/miniprogram/dev/wxcloudrun/src/scene/build/speed.html)
-# 基于 node:18-alpine，内置 musl 兼容的 Node.js 18
-FROM node:18-alpine
+# 基于 alpine:3.13，手动安装 Node.js 18
+# (旧方案，经过生产验证，微信登录正常)
+FROM alpine:3.13
 
 # 容器默认时区为UTC，如需使用上海时间请启用以下时区设置命令
 # RUN apk add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo Asia/Shanghai > /etc/timezone
 
-# 使用 HTTPS 协议访问容器云调用证书安装
-RUN apk add --update --no-cache ca-certificates
+# 安装 CA 证书（HTTPS 请求必须，解决容器内微信 API 调用失败）
+RUN apk add --update --no-cache ca-certificates && update-ca-certificates
 
-# # 指定工作目录
+# 安装 Node.js 18.20.4 LTS（sharp 要求 >=18.17.0）
+RUN apk add --update --no-cache curl && \
+    curl -fsSL https://unofficial-builds.nodejs.org/download/release/v18.20.4/node-v18.20.4-linux-x64-musl.tar.gz | tar -xz -C /usr/local --strip-components=1 && \
+    npm install -g npm
+
+# 指定工作目录
 WORKDIR /app
 
 # 拷贝包管理文件
@@ -21,7 +26,6 @@ RUN npm config set registry https://mirrors.cloud.tencent.com/npm/
 # npm 安装依赖
 RUN npm install
 
-# 将当前目录（dockerfile所在目录）下所有文件都拷贝到工作目录下（.dockerignore中文件除外）
 COPY . /app
 
 # 执行启动命令
