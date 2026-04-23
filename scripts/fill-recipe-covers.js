@@ -18,6 +18,7 @@
 
 const https = require('https');
 const http = require('http');
+const sharp = require('sharp');
 const COS = require('cos-nodejs-sdk-v5');
 
 // ========== 配置 ==========
@@ -387,8 +388,15 @@ async function searchPixabay(query) {
 async function downloadAndUpload(imageUrl, recipeId) {
   try {
     const buffer = await downloadImage(imageUrl);
-    const imageBase64 = buffer.toString('base64');
-    
+
+    // 压缩：750px 宽，JPEG 80%，预计 100-200KB（原图 1.5MB）
+    const compressed = await sharp(buffer)
+      .resize(750, null, { withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+
+    const imageBase64 = compressed.toString('base64');
+
     // 调用云端接口上传，云端用容器内的 COS 凭据直传
     const res = await httpPost('/api/upload-cover', { imageBase64 });
     if (res.success && res.url) {
