@@ -44,9 +44,6 @@ module.exports = router;
 module.exports.initAuth = initAuth;
 module.exports.verifyAdmin = _verifyAdmin;
 
-// 腾讯云托管上的接口地址（开放接口服务，无需 token）
-const BASE_URL = 'https://express-yi42-246142-8-1421971309.sh.run.tcloudbase.com';
-
 // 本地历史文章目录（降级用）
 const LOCAL_ARTICLES_DIR = path.resolve(
   process.env.HOME,
@@ -54,19 +51,17 @@ const LOCAL_ARTICLES_DIR = path.resolve(
 );
 
 /**
- * 从服务器查询已发布选题（优先）
+ * 从数据库查询已发布选题（优先）
  * @returns {string[]} 已发布过的标题列表
  */
 async function fetchServerTopics() {
   try {
-    const res = require('axios').get(`${BASE_URL}/api/published/topics`, { timeout: 8000 });
-    const data = (await res).data;
-    if (Array.isArray(data.topics)) {
-      console.log(`[published] 服务器获取选题成功，共 ${data.topics.length} 条`);
-      return data.topics;
-    }
+    const articles = await PublishedArticle.findAll({ attributes: ['title'] });
+    const topics = articles.map(a => a.title).filter(Boolean);
+    console.log(`[published] 数据库获取选题成功，共 ${topics.length} 条`);
+    return topics;
   } catch (e) {
-    console.warn(`[published] 服务器查询失败，降级本地: ${e.message}`);
+    console.warn(`[published] 数据库查询失败，降级本地: ${e.message}`);
   }
   return null;
 }
