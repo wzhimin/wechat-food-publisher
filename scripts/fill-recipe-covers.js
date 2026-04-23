@@ -2,14 +2,14 @@
 /**
  * 菜谱封面图批量补充工具 V2
  * 
- * 策略：通义万相 AI 生成 → Pixabay 搜索 → 智能降级（别名/食材/英文关键词）
+ * 策略：通义万相 AI 生成（唯一来源），失败则留空
  * 通过云端 HTTP API 更新数据库
  * 
  * 用法:
  *   node scripts/fill-recipe-covers.js
  *   node scripts/fill-recipe-covers.js --dry-run    # 只搜索不更新
  *   node scripts/fill-recipe-covers.js --limit=20   # 只处理前20条
- *   node scripts/fill-recipe-covers.js --no-ai      # 跳过AI生成，只用Pixabay
+ *   node scripts/fill-recipe-covers.js --dry-run    # 只搜索不更新
  * 
  * 也可作为模块导入：
  *   const { fillCoversForRecipes } = require('./scripts/fill-recipe-covers');
@@ -390,7 +390,8 @@ async function downloadAndUpload(imageUrl) {
 }
 
 async function findCoverImage(title, useAI = true) {
-  // 1. 通义万相 AI 生成
+  // 只用通义万相 AI 生成图片
+  // AI 失败则留空，不降级 Pixabay（Pixabay 图片与菜谱匹配度低）
   if (useAI) {
     console.log(`    🤖 尝试 AI 生成...`);
     const aiResult = await generateWithWanxiang(title);
@@ -399,19 +400,7 @@ async function findCoverImage(title, useAI = true) {
       const finalUrl = await downloadAndUpload(aiResult.url);
       return { url: finalUrl, source: '通义万相→本地', photographer: 'AI生成' };
     }
-    console.log(`    ⚠️  AI 生成失败，降级到 Pixabay`);
-  }
-
-  // 2. Pixabay 搜索
-  const keywords = generateKeywords(title);
-  for (const { kw, label } of keywords) {
-    const result = await searchPixabay(kw);
-    if (result) {
-      console.log(`    🖼️  ${label} → 找到，下载并保存到服务器...`);
-      const finalUrl = await downloadAndUpload(result.url);
-      return { url: finalUrl, source: 'Pixabay→本地', photographer: result.photographer || '' };
-    }
-    await sleep(300);
+    console.log(`    ⚠️  AI 生成失败，无封面图`);
   }
   return null;
 }
@@ -438,7 +427,7 @@ async function fillCoversForRecipes(recipes, options = {}) {
   }
 
   console.log(`[补封面] 开始处理 ${noCover.length} 道无封面菜谱`);
-  console.log(`[补封面] 图片来源: ${useAI ? '通义万相 AI → Pixabay' : 'Pixabay'}`);
+  console.log(`[补封面] 图片来源: 通义万相 AI（唯一来源，失败则留空）`);
   
   let success = 0, failed = 0;
   const failedTitles = [];
@@ -497,14 +486,11 @@ async function main() {
   // 解析命令行参数
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
-  const noAI = args.includes('--no-ai');
   const limit = parseInt(args.find(a => a.startsWith('--limit='))?.split('=')[1]) || 50;
 
-  console.log(`✅ Pixabay API Key: 已配置`);
   console.log(`✅ 通义万相 API Key: ${DASHSCOPE_API_KEY.slice(0, 10)}...`);
   console.log(`📡 后端地址: ${API_BASE}`);
   console.log(`🔧 模式: ${dryRun ? '试运行' : '正式模式'}`);
-  console.log(`🤖 AI生成: ${noAI ? '关闭' : '开启'}`);
   console.log(`📊 批次大小: ${limit}\n`);
 
   // 拉取菜谱列表
@@ -526,7 +512,7 @@ async function main() {
     process.exit(0);
   }
 
-  const result = await fillCoversForRecipes(batch, { dryRun, delayMs: 1500, useAI: !noAI });
+  const result = await fillCoversForRecipes(batch, { dryRun, delayMs: 1500, useAI: true });
 
   console.log('\n═══════════════════════════════════════');
   console.log('📋 结果汇总');
