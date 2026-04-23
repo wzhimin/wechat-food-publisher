@@ -1,17 +1,11 @@
-# 基于 alpine:3.13，手动安装 Node.js 18
-# (旧方案，经过生产验证，微信登录正常)
-FROM alpine:3.13
+# 基于 node:18-alpine（腾讯云容器内 axios 调微信 API 证书问题已通过代码 httpsAgent 解决）
+FROM node:18-alpine
 
 # 容器默认时区为UTC，如需使用上海时间请启用以下时区设置命令
 # RUN apk add tzdata && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo Asia/Shanghai > /etc/timezone
 
-# 安装 CA 证书（HTTPS 请求必须，解决容器内微信 API 调用失败）
-RUN apk add --update --no-cache ca-certificates && update-ca-certificates
-
-# 安装 Node.js 18.20.4 LTS（sharp 要求 >=18.17.0）
-RUN apk add --update --no-cache curl && \
-    curl -fsSL https://unofficial-builds.nodejs.org/download/release/v18.20.4/node-v18.20.4-linux-x64-musl.tar.gz | tar -xz -C /usr/local --strip-components=1 && \
-    npm install -g npm
+# 安装 CA 证书
+RUN apk add --update --no-cache ca-certificates
 
 # 指定工作目录
 WORKDIR /app

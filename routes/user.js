@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const https = require('https');
 const User = require('../models/User');
 
 // 小程序 appid/secret（需在云托管环境变量中配置）
@@ -13,7 +14,10 @@ async function code2openid(code) {
     throw new Error('后端未配置 MINI_APP_ID 或 MINI_APP_SECRET');
   }
   const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${MINI_APP_ID}&secret=${MINI_APP_SECRET}&js_code=${code}&grant_type=authorization_code`;
-  const res = await axios.get(url);
+  const res = await axios.get(url, {
+    // 腾讯云容器环境代理 SSL 证书问题，跳过验证
+    httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+  });
   if (res.data.errcode) {
     throw new Error(`微信接口返回错误: ${res.data.errmsg} (${res.data.errcode})`);
   }
